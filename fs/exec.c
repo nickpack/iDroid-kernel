@@ -58,6 +58,9 @@
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
+#ifdef CONFIG_QEMU_TRACE
+	void qemu_trace_thread_name(char *name);
+#endif
 
 #ifdef __alpha__
 /* for /sbin/loader handling in search_binary_handler() */
@@ -955,6 +958,9 @@ void set_task_comm(struct task_struct *tsk, char *buf)
 	task_lock(tsk);
 	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
 	task_unlock(tsk);
+#ifdef CONFIG_QEMU_TRACE
+	qemu_trace_thread_name(buf);
+#endif
 }
 
 int flush_old_exec(struct linux_binprm * bprm)
@@ -1270,6 +1276,10 @@ void free_bprm(struct linux_binprm *bprm)
 	kfree(bprm);
 }
 
+#ifdef CONFIG_QEMU_TRACE
+extern void qemu_trace_execve(int argc, char __user * __user * argv);
+#endif
+
 /*
  * sys_execve() executes a new program.
  */
@@ -1337,6 +1347,10 @@ int do_execve(char * filename,
 		goto out;
 
 	current->flags &= ~PF_KTHREAD;
+#ifdef CONFIG_QEMU_TRACE
+        qemu_trace_execve(bprm->argc, argv);
+#endif
+
 	retval = search_binary_handler(bprm,regs);
 	if (retval >= 0) {
 		/* execve success */

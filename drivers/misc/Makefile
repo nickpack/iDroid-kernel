@@ -39,3 +39,4 @@ obj-$(CONFIG_LOGGER)		+= logger.o
 obj-$(CONFIG_UID_STAT)		+= uid_stat.o
 obj-$(CONFIG_LOW_MEMORY_KILLER)	+= lowmemorykiller.o
 obj-$(CONFIG_ANDROID_RAM_CONSOLE)	+= ram_console.o
+obj-$(CONFIG_QEMU_TRACE)	+= qemutrace/

@@ -569,4 +569,9 @@ config ANDROID_RAM_CONSOLE_EARLY_SIZE
         default 0
         depends on ANDROID_RAM_CONSOLE_EARLY_INIT
 
+config QEMU_TRACE
+        tristate "Virtual Device for QEMU tracing"
+        ---help---
+          This is a virtual device for QEMU tracing.
+
 endif # MISC_DEVICES
