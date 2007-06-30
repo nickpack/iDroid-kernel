@@ -593,4 +593,10 @@ config RTC_DRV_PPC
 	 the RTC. This exposes that functionality through the generic RTC
 	 class.
 
+config RTC_DRV_GOLDFISH
+	tristate "GOLDFISH"
+	depends on RTC_CLASS
+	help
+	  RTC driver for Goldfish Virtual Platform
+
 endif # RTC_CLASS
