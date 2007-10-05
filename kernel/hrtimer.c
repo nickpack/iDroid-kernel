@@ -1080,8 +1080,14 @@ static void run_hrtimer_pending(struct hrtimer_cpu_base *cpu_base)
 			 * If the timer was rearmed on another CPU, reprogram
 			 * the event device.
 			 */
-			if (timer->base->first == &timer->node)
-				hrtimer_reprogram(timer, timer->base);
+			if (timer->base->first == &timer->node) {
+				if(hrtimer_reprogram(timer, timer->base)) {
+					__remove_hrtimer(timer, timer->base,
+							 HRTIMER_STATE_PENDING, 0);
+					list_add_tail(&timer->cb_entry,
+						      &cpu_base->cb_pending);
+				}
+			}
 		}
 	}
 	spin_unlock_irq(&cpu_base->lock);
