@@ -62,4 +62,9 @@ config BATTERY_PALMTX
 	help
 	  Say Y to enable support for the battery in Palm T|X.
 
+config BATTERY_GOLDFISH
+	tristate "Goldfish battery driver"
+	help
+	  Say Y to enable support for the battery and AC power in the Goldfish emulator.
+
 endif # POWER_SUPPLY
