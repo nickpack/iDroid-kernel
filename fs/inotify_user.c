@@ -32,6 +32,9 @@
 #include <linux/inotify.h>
 #include <linux/syscalls.h>
 #include <linux/magic.h>
+#ifdef CONFIG_ANDROID_POWER
+#include <linux/android_power.h>
+#endif
 
 #include <asm/ioctls.h>
 
@@ -83,6 +86,9 @@ struct inotify_device {
 	unsigned int		queue_size;	/* size of the queue (bytes) */
 	unsigned int		event_count;	/* number of pending events */
 	unsigned int		max_events;	/* maximum number of events */
+#ifdef CONFIG_ANDROID_POWER
+	android_suspend_lock_t suspend_lock;
+#endif
 };
 
 /*
@@ -159,6 +165,9 @@ static inline void put_inotify_dev(struct inotify_device *dev)
 	if (atomic_dec_and_test(&dev->count)) {
 		atomic_dec(&dev->user->inotify_devs);
 		free_uid(dev->user);
+#ifdef CONFIG_ANDROID_POWER
+		android_uninit_suspend_lock(&dev->suspend_lock);
+#endif
 		kfree(dev);
 	}
 }
@@ -317,6 +326,9 @@ static void inotify_dev_queue_event(struct inotify_watch *w, u32 wd, u32 mask,
 	list_add_tail(&kevent->list, &dev->events);
 	wake_up_interruptible(&dev->wq);
 	kill_fasync(&dev->fa, SIGIO, POLL_IN);
+#ifdef CONFIG_ANDROID_POWER
+	android_lock_suspend_auto_expire(&dev->suspend_lock, 5 * HZ);
+#endif
 
 out:
 	mutex_unlock(&dev->ev_mutex);
@@ -334,6 +346,10 @@ static void remove_kevent(struct inotify_device *dev,
 
 	dev->event_count--;
 	dev->queue_size -= sizeof(struct inotify_event) + kevent->event.len;
+#ifdef CONFIG_ANDROID_POWER
+	if(dev->event_count == 0)
+		android_unlock_suspend(&dev->suspend_lock);
+#endif
 
 	kfree(kevent->name);
 	kmem_cache_free(event_cachep, kevent);
@@ -622,6 +638,10 @@ asmlinkage long sys_inotify_init(void)
 	dev->max_events = inotify_max_queued_events;
 	dev->user = user;
 	atomic_set(&dev->count, 0);
+#ifdef CONFIG_ANDROID_POWER
+	dev->suspend_lock.name = "inotify";
+	android_init_suspend_lock(&dev->suspend_lock);
+#endif
 
 	get_inotify_dev(dev);
 	atomic_inc(&user->inotify_devs);
