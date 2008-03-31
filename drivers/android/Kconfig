@@ -14,4 +14,8 @@ config ANDROID_POWER_STAT
 	depends on ANDROID_POWER
 	default y
 
+config ANDROID_LOGGER
+	bool "Android log driver"
+	default y
+
 endmenu
