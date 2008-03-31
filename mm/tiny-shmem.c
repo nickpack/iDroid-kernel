@@ -96,23 +96,29 @@ put_memory:
 	return ERR_PTR(error);
 }
 
-/**
- * shmem_zero_setup - setup a shared anonymous mapping
- * @vma: the vma to be mmapped is prepared by do_mmap_pgoff
- */
-int shmem_zero_setup(struct vm_area_struct *vma)
+void shmem_set_file(struct vm_area_struct *vma, struct file *file)
 {
-	struct file *file;
-	loff_t size = vma->vm_end - vma->vm_start;
-
-	file = shmem_file_setup("dev/zero", size, vma->vm_flags);
-	if (IS_ERR(file))
-		return PTR_ERR(file);
-
 	if (vma->vm_file)
 		fput(vma->vm_file);
 	vma->vm_file = file;
 	vma->vm_ops = &generic_file_vm_ops;
+}
+
+/**
+ * shmem_zero_setup - setup a shared anonymous mapping
+ * @vma: the vma to be mmapped is prepared by do_mmap_pgoff
+ */
+int shmem_zero_setup(char *name, struct vm_area_struct *vma)
+{
+	struct file *file;
+	loff_t size = vma->vm_end - vma->vm_start;
+
+	file = shmem_file_setup(name, size, vma->vm_flags);
+	if (IS_ERR(file))
+		return PTR_ERR(file);
+
+	shmem_set_file(vma, file);
+
 	return 0;
 }
 
