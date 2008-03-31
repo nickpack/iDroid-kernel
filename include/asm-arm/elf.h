@@ -59,6 +59,11 @@ typedef struct user_fp elf_fpregset_t;
 #define ELF_PLATFORM	(elf_platform)
 
 extern char elf_platform[];
+
+struct task_struct;
+
+extern int dump_task_regs (struct task_struct *, elf_gregset_t *);
+
 #endif
 
 /*
@@ -112,5 +117,8 @@ extern char elf_platform[];
 				clear_thread_flag(TIF_USING_IWMMXT);	\
 		}							\
 	} while (0)
+
+#define ELF_CORE_COPY_TASK_REGS(tsk, elf_regs) dump_task_regs(tsk, elf_regs)
+
 
 #endif
