@@ -181,4 +181,11 @@ config LEDS_TRIGGER_HEARTBEAT
 	  load average.
 	  If unsure, say Y.
 
+config LEDS_TRIGGER_SLEEP
+	tristate "LED Sleep Mode Trigger"
+	depends on LEDS_TRIGGERS && ANDROID_POWER
+	help
+	  This turns LEDs on when the screen is off but the cpu still running.
+	  If unsure, say Y.
+
 endif # NEW_LEDS
