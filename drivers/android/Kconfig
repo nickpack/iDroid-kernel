@@ -1,3 +1,7 @@
 menu "Android"
 
+config ANDROID_BINDER_IPC
+	tristate "Binder IPC Driver"
+	default y
+
 endmenu
