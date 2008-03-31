@@ -537,4 +537,10 @@ config RTC_DRV_RS5C313
 	help
 	  If you say yes here you get support for the Ricoh RS5C313 RTC chips.
 
+config RTC_DRV_GOLDFISH
+	tristate "GOLDFISH"
+	depends on RTC_CLASS
+	help
+	  RTC driver for Goldfish Virtual Platform
+
 endif # RTC_CLASS
