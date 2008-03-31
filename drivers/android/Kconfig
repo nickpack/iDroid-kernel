@@ -4,4 +4,14 @@ config ANDROID_BINDER_IPC
 	tristate "Binder IPC Driver"
 	default y
 
+config ANDROID_POWER
+	bool "Android power driver"
+	depends on PM && RTC_CLASS
+	default n
+
+config ANDROID_POWER_STAT
+	bool "Android power driver lock stats"
+	depends on ANDROID_POWER
+	default y
+
 endmenu
