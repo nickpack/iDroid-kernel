@@ -13,6 +13,9 @@
 #include <linux/module.h>
 #include <linux/syscalls.h>
 #include <linux/freezer.h>
+#ifdef CONFIG_ANDROID_POWER
+#include <linux/android_power.h>
+#endif
 
 /* 
  * Timeout for stopping processes
@@ -164,6 +167,9 @@ static int try_to_freeze_tasks(int freeze_user_space)
 	struct timeval start, end;
 	s64 elapsed_csecs64;
 	unsigned int elapsed_csecs;
+#ifdef CONFIG_ANDROID_POWER
+	unsigned int wakeup = 0;
+#endif
 
 	do_gettimeofday(&start);
 
@@ -190,6 +196,12 @@ static int try_to_freeze_tasks(int freeze_user_space)
 		} while_each_thread(g, p);
 		read_unlock(&tasklist_lock);
 		yield();			/* Yield is okay here */
+#ifdef CONFIG_ANDROID_POWER
+		if (todo && !android_power_is_driver_suspended()) {
+			wakeup = 1;
+			break;
+		}
+#endif
 		if (time_after(jiffies, end_time))
 			break;
 	} while (todo);
@@ -205,11 +217,22 @@ static int try_to_freeze_tasks(int freeze_user_space)
 		 * and caller must call thaw_processes() if something fails),
 		 * but it cleans up leftover PF_FREEZE requests.
 		 */
+#ifdef CONFIG_ANDROID_POWER
+		if(wakeup) {
+			printk("\n");
+			printk(KERN_ERR "Freezing of %s aborted\n",
+					freeze_user_space ? "user space " : "tasks ");
+		}
+		else {
+#endif
 		printk("\n");
 		printk(KERN_ERR "Freezing of tasks failed after %d.%02d seconds "
 				"(%d tasks refusing to freeze):\n",
 				elapsed_csecs / 100, elapsed_csecs % 100, todo);
 		show_state();
+#ifdef CONFIG_ANDROID_POWER
+		}
+#endif
 		read_lock(&tasklist_lock);
 		do_each_thread(g, p) {
 			task_lock(p);
