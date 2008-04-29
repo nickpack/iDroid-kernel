@@ -108,6 +108,7 @@ static inline int valid_mmap_phys_addr_range(unsigned long pfn, size_t size)
 }
 #endif
 
+#ifdef CONFIG_DEVMEM
 /*
  * This funcion reads the *physical* memory. The f_pos points directly to the 
  * memory location. 
@@ -315,6 +316,7 @@ static int mmap_kmem(struct file * file, struct vm_area_struct * vma)
 	vma->vm_pgoff = pfn;
 	return mmap_mem(file, vma);
 }
+#endif	/* CONFIG_DEVMEM */
 
 #ifdef CONFIG_CRASH_DUMP
 /*
@@ -350,6 +352,7 @@ static ssize_t read_oldmem(struct file *file, char __user *buf,
 }
 #endif
 
+#ifdef CONFIG_DEVMEM
 extern long vread(char *buf, char *addr, unsigned long count);
 extern long vwrite(char *buf, char *addr, unsigned long count);
 
@@ -557,6 +560,7 @@ static ssize_t write_kmem(struct file * file, const char __user * buf,
  	*ppos = p;
  	return virtr + wrote;
 }
+#endif	/* CONFIG_DEVMEM */
 
 #ifdef CONFIG_DEVPORT
 static ssize_t read_port(struct file * file, char __user * buf,
@@ -681,6 +685,8 @@ static loff_t null_lseek(struct file * file, loff_t offset, int orig)
 	return file->f_pos = 0;
 }
 
+#if defined(CONFIG_DEVMEM) || defined(CONFIG_DEVPORT)
+
 /*
  * The memory devices use the full 32/64 bits of the offset, and so we cannot
  * check against negative addresses: they are ok. The return value is weird,
@@ -712,10 +718,14 @@ static loff_t memory_lseek(struct file * file, loff_t offset, int orig)
 	return ret;
 }
 
+#endif
+
+#if defined(CONFIG_DEVMEM) || defined(CONFIG_DEVPORT)
 static int open_port(struct inode * inode, struct file * filp)
 {
 	return capable(CAP_SYS_RAWIO) ? 0 : -EPERM;
 }
+#endif
 
 #define zero_lseek	null_lseek
 #define full_lseek      null_lseek
@@ -725,6 +735,7 @@ static int open_port(struct inode * inode, struct file * filp)
 #define open_kmem	open_mem
 #define open_oldmem	open_mem
 
+#ifdef CONFIG_DEVMEM
 static const struct file_operations mem_fops = {
 	.llseek		= memory_lseek,
 	.read		= read_mem,
@@ -742,6 +753,7 @@ static const struct file_operations kmem_fops = {
 	.open		= open_kmem,
 	.get_unmapped_area = get_unmapped_area_mem,
 };
+#endif
 
 static const struct file_operations null_fops = {
 	.llseek		= null_lseek,
@@ -815,6 +827,7 @@ static const struct file_operations kmsg_fops = {
 static int memory_open(struct inode * inode, struct file * filp)
 {
 	switch (iminor(inode)) {
+#ifdef CONFIG_DEVMEM
 		case 1:
 			filp->f_op = &mem_fops;
 			filp->f_mapping->backing_dev_info =
@@ -825,6 +838,7 @@ static int memory_open(struct inode * inode, struct file * filp)
 			filp->f_mapping->backing_dev_info =
 				&directly_mappable_cdev_bdi;
 			break;
+#endif
 		case 3:
 			filp->f_op = &null_fops;
 			break;
@@ -872,8 +886,10 @@ static const struct {
 	umode_t			mode;
 	const struct file_operations	*fops;
 } devlist[] = { /* list of minor devices */
+#ifdef CONFIG_DEVMEM
 	{1, "mem",     S_IRUSR | S_IWUSR | S_IRGRP, &mem_fops},
 	{2, "kmem",    S_IRUSR | S_IWUSR | S_IRGRP, &kmem_fops},
+#endif
 	{3, "null",    S_IRUGO | S_IWUGO,           &null_fops},
 #ifdef CONFIG_DEVPORT
 	{4, "port",    S_IRUSR | S_IWUSR | S_IRGRP, &port_fops},

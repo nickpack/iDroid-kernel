@@ -1041,6 +1041,19 @@ config TELCLOCK
 	  /sys/devices/platform/telco_clock, with a number of files for
 	  controlling the behavior of this hardware.
 
+config DEVMEM
+	bool "Memory device driver"
+	default y
+	help
+	  The memory driver provides two character devices, mem and kmem, which
+	  provide access to the system's memory. The mem device is a view of
+	  physical memory, and each byte in the device corresponds to the
+	  matching physical address. The kmem device is the same as mem, but
+	  the addresses correspond to the kernel's virtual address space rather
+	  than physical memory. These devices are standard parts of a Linux
+	  system and most users should say Y here. You might say N if very
+	  security conscience or memory is tight.
+
 config DEVPORT
 	bool
 	depends on !M68K
