@@ -344,6 +344,16 @@ end:
 	local_irq_restore(flags);
 }
 
+void tick_nohz_update_stopped_sched_tick()
+{
+	struct tick_sched *ts;
+	int cpu;
+	cpu = smp_processor_id();
+	ts = &per_cpu(tick_cpu_sched, cpu);
+	if (ts->tick_stopped)
+		tick_nohz_stop_sched_tick();
+}
+
 /**
  * tick_nohz_get_sleep_length - return the length of the current sleep
  *
@@ -584,11 +594,14 @@ static enum hrtimer_restart tick_sched_timer(struct hrtimer *timer)
 		}
 		update_process_times(user_mode(regs));
 		profile_tick(CPU_PROFILING);
-	}
+	} else
+		WARN_ON(1);
 
 	/* Do not restart, when we are in the idle loop */
-	if (ts->tick_stopped)
+	if (ts->tick_stopped) {
+		WARN_ON(!idle_cpu(smp_processor_id()));
 		return HRTIMER_NORESTART;
+	}
 
 	hrtimer_forward(timer, now, tick_period);
 
