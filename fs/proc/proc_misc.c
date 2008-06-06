@@ -700,7 +700,7 @@ static ssize_t kpagecount_read(struct file *file, char __user *buf,
 	pfn = src / KPMSIZE;
 	count = min_t(size_t, count, (max_pfn * KPMSIZE) - src);
 	if (src & KPMMASK || count & KPMMASK)
-		return -EIO;
+		return -EINVAL;
 
 	while (count > 0) {
 		ppage = NULL;
@@ -766,7 +766,7 @@ static ssize_t kpageflags_read(struct file *file, char __user *buf,
 	pfn = src / KPMSIZE;
 	count = min_t(unsigned long, count, (max_pfn * KPMSIZE) - src);
 	if (src & KPMMASK || count & KPMMASK)
-		return -EIO;
+		return -EINVAL;
 
 	while (count > 0) {
 		ppage = NULL;
