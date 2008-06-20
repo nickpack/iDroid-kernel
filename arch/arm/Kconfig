@@ -83,6 +83,10 @@ config STACKTRACE_SUPPORT
 	bool
 	default y
 
+config HAVE_LATENCYTOP_SUPPORT
+	bool
+	default y if !SMP
+
 config LOCKDEP_SUPPORT
 	bool
 	default y
