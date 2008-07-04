@@ -43,7 +43,7 @@
 
 #include <net/bluetooth/bluetooth.h>
 
-#ifdef CONFIG_ANDROID_PARANOID_BLUETOOTH
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
 #include <linux/android_aid.h>
 #endif
 
@@ -138,14 +138,27 @@ static void bt_reclassify_sock_lock(struct socket *sock, int proto)
 			&bt_lock_key[proto]);
 }
 
-#ifdef CONFIG_ANDROID_PARANOID_BLUETOOTH
-static int is_bt_admin(void) {
-	return !current->uid || current->gid == AID_NET_BT_ADMIN ||
-			groups_search(current->group_info, AID_NET_BT_ADMIN);
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
+static inline int current_has_bt_admin(void)
+{
+	return (!current->uid || current->gid == AID_NET_BT_ADMIN ||
+		groups_search(current->group_info, AID_NET_BT_ADMIN));
 }
-static int is_bt_user_or_admin(void) {
-	return is_bt_admin() || current->gid == AID_NET_BT ||
-			groups_search(current->group_info, AID_NET_BT);
+
+static inline int current_has_bt(void)
+{
+	return (current_has_bt_admin() || current->gid == AID_NET_BT ||
+		groups_search(current->group_info, AID_NET_BT));
+}
+# else
+static inline int current_has_bt_admin(void)
+{
+	return 1;
+}
+
+static inline int current_has_bt(void)
+{
+	return 1;
 }
 #endif
 
@@ -153,12 +166,12 @@ static int bt_sock_create(struct net *net, struct socket *sock, int proto)
 {
 	int err;
 
-#ifdef CONFIG_ANDROID_PARANOID_BLUETOOTH
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
 	if (proto == BTPROTO_RFCOMM || proto == BTPROTO_SCO ||
 			proto == BTPROTO_L2CAP) {
-		if (!is_bt_user_or_admin())
+		if (!current_has_bt())
 			return -EPERM;
-	} else if (!is_bt_admin()) {
+	} else if (!current_has_bt_admin()) {
 		return -EPERM;
 	}
 #endif

@@ -116,6 +116,10 @@
 #include <linux/mroute.h>
 #endif
 
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
+#include <linux/android_aid.h>
+#endif
+
 DEFINE_SNMP_STAT(struct linux_mib, net_statistics) __read_mostly;
 
 extern void ip_mc_drop_socket(struct sock *sk);
@@ -243,6 +247,19 @@ void build_ehash_secret(void)
 }
 EXPORT_SYMBOL(build_ehash_secret);
 
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
+static inline int current_has_network(void)
+{
+	return (!current->uid || current->gid == AID_INET ||
+		groups_search(current->group_info, AID_INET));
+}
+# else
+static inline int current_has_network(void)
+{
+	return 1;
+}
+#endif
+
 /*
  *	Create an inet socket.
  */
@@ -261,6 +278,9 @@ static int inet_create(struct net *net, struct socket *sock, int protocol)
 
 	if (net != &init_net)
 		return -EAFNOSUPPORT;
+
+	if (!current_has_network())
+		return -EACCES;
 
 	if (sock->type != SOCK_RAW &&
 	    sock->type != SOCK_DGRAM &&

@@ -62,6 +62,10 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
+#include <linux/android_aid.h>
+#endif
+
 MODULE_AUTHOR("Cast of dozens");
 MODULE_DESCRIPTION("IPv6 protocol stack for Linux");
 MODULE_LICENSE("GPL");
@@ -79,6 +83,19 @@ static __inline__ struct ipv6_pinfo *inet6_sk_generic(struct sock *sk)
 	return (struct ipv6_pinfo *)(((u8 *)sk) + offset);
 }
 
+#ifdef CONFIG_ANDROID_PARANOID_NETWORK
+static inline int current_has_network(void)
+{
+	return (!current->uid || current->gid == AID_INET ||
+		groups_search(current->group_info, AID_INET));
+}
+# else
+static inline int current_has_network(void)
+{
+	return 1;
+}
+#endif
+
 static int inet6_create(struct net *net, struct socket *sock, int protocol)
 {
 	struct inet_sock *inet;
@@ -94,6 +111,9 @@ static int inet6_create(struct net *net, struct socket *sock, int protocol)
 
 	if (net != &init_net)
 		return -EAFNOSUPPORT;
+
+	if (!current_has_network())
+		return -EACCES;
 
 	if (sock->type != SOCK_RAW &&
 	    sock->type != SOCK_DGRAM &&
