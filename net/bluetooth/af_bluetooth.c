@@ -43,6 +43,10 @@
 
 #include <net/bluetooth/bluetooth.h>
 
+#ifdef CONFIG_ANDROID_PARANOID_BLUETOOTH
+#include <linux/android_aid.h>
+#endif
+
 #ifndef CONFIG_BT_SOCK_DEBUG
 #undef  BT_DBG
 #define BT_DBG(D...)
@@ -134,9 +138,30 @@ static void bt_reclassify_sock_lock(struct socket *sock, int proto)
 			&bt_lock_key[proto]);
 }
 
+#ifdef CONFIG_ANDROID_PARANOID_BLUETOOTH
+static int is_bt_admin(void) {
+	return !current->uid || current->gid == AID_NET_BT_ADMIN ||
+			groups_search(current->group_info, AID_NET_BT_ADMIN);
+}
+static int is_bt_user_or_admin(void) {
+	return is_bt_admin() || current->gid == AID_NET_BT ||
+			groups_search(current->group_info, AID_NET_BT);
+}
+#endif
+
 static int bt_sock_create(struct net *net, struct socket *sock, int proto)
 {
 	int err;
+
+#ifdef CONFIG_ANDROID_PARANOID_BLUETOOTH
+	if (proto == BTPROTO_RFCOMM || proto == BTPROTO_SCO ||
+			proto == BTPROTO_L2CAP) {
+		if (!is_bt_user_or_admin())
+			return -EPERM;
+	} else if (!is_bt_admin()) {
+		return -EPERM;
+	}
+#endif
 
 	if (net != &init_net)
 		return -EAFNOSUPPORT;

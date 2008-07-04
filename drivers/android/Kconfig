@@ -81,4 +81,10 @@ config ANDROID_TIMED_GPIO
 	depends on GENERIC_GPIO
 	default y
 
+config ANDROID_PARANOID_BLUETOOTH
+	bool "Require gid AID_NET_BT [_ADMIN] to create AF_BLUETOOTH sockets"
+	default y
+	help
+		none
+
 endmenu
