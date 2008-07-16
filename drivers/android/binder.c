@@ -1127,7 +1127,11 @@ binder_dec_ref(struct binder_ref *ref, int strong)
 {
 	if(strong) {
 		if(ref->strong == 0) {
-			BUG();
+			binder_user_error("binder: %d invalid dec strong, "
+					  "ref %d desc %d s %d w %d\n",
+					  ref->proc->pid, ref->debug_id,
+					  ref->desc, ref->strong, ref->weak);
+			return -EINVAL;
 		}
 		ref->strong--;
 		if(ref->strong == 0) {
@@ -1138,6 +1142,13 @@ binder_dec_ref(struct binder_ref *ref, int strong)
 		}
 	}
 	else {
+		if (ref->weak == 0) {
+			binder_user_error("binder: %d invalid dec weak, "
+					  "ref %d desc %d s %d w %d\n",
+					  ref->proc->pid, ref->debug_id,
+					  ref->desc, ref->strong, ref->weak);
+			return -EINVAL;
+		}
 		ref->weak--;
 	}
 	if(ref->strong == 0 && ref->weak == 0) {
