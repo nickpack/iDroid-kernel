@@ -972,7 +972,7 @@ binder_dec_node(struct binder_node *node, int strong, int internal)
 	}
 	else {
 		list_del_init(&node->work.entry);
-		if(hlist_empty(&node->refs)) {
+		if(hlist_empty(&node->refs) && !node->local_strong_refs && !node->local_weak_refs) {
 			if(node->proc) {
 				rb_erase(&node->rb_node, &node->proc->nodes);
 				if(binder_debug_mask & BINDER_DEBUG_INTERNAL_REFS)
