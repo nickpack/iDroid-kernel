@@ -458,7 +458,9 @@ void hci_conn_del_sysfs(struct hci_conn *conn);
 #define lmp_encrypt_capable(dev)   ((dev)->features[0] & LMP_ENCRYPT)
 #define lmp_sniff_capable(dev)     ((dev)->features[0] & LMP_SNIFF)
 #define lmp_sniffsubr_capable(dev) ((dev)->features[5] & LMP_SNIFF_SUBR)
-#define lmp_esco_capable(dev)      ((dev)->features[3] & LMP_ESCO)
+/* TODO(npelly): turn eSCO on when esco->sco bug fixed - http://b/1019875
+ * ((dev)->features[3] & LMP_ESCO) */
+#define lmp_esco_capable(dev)      0  
 
 /* ----- HCI protocols ----- */
 struct hci_proto {
