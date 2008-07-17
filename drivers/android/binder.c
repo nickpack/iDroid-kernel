@@ -547,48 +547,6 @@ static struct binder_buffer *binder_buffer_lookup(struct binder_proc *proc, void
 	return NULL;
 }
 
-static void binder_update_user_pages(struct binder_proc *proc)
-{
-	int i;
-	int ret;
-	struct page *page;
-	struct vm_area_struct *vma;
-	unsigned long addr;
-	
-	vma = proc->vma;
-	if(binder_debug_mask & BINDER_DEBUG_USER_PAGES)
-		printk(KERN_INFO "binder: %d:%d update user pages for vma %p\n",
-			proc->pid, current->pid, vma);
-	if (!vma)
-		goto err_no_vma;
-	BUG_ON(!proc->pages);
-	for(i = 0; i < proc->buffer_size / PAGE_SIZE; i++) {
-		addr = vma->vm_start + i * PAGE_SIZE;
-		page = follow_page(vma, addr, 0);
-		if (page == proc->pages[i])
-			continue;
-		if (page) {
-			if(binder_debug_mask & BINDER_DEBUG_USER_PAGES)
-				printk(KERN_INFO "binder: %d:%d: unmap 0x%lx\n",
-					proc->pid, current->pid, addr);
-			zap_page_range(vma, addr, PAGE_SIZE, NULL);
-		}
-		if (proc->pages[i]) {
-			if(binder_debug_mask & BINDER_DEBUG_USER_PAGES)
-				printk(KERN_INFO "binder: %d:%d: map 0x%lx\n",
-					proc->pid, current->pid, addr);
-			ret = vm_insert_page(vma, addr, proc->pages[i]);
-			if(ret) {
-				printk(KERN_ERR "binder: %d: "
-					"binder_update_user_pages "
-					"failed to map page at %lx\n",
-					proc->pid, addr);
-			}
-		}
-	}
-err_no_vma:
-	proc->vma_need_update = 0;
-}
 
 static int binder_update_page_range(struct binder_proc *proc, int allocate, void *start, void *end)
 {
@@ -617,8 +575,6 @@ static int binder_update_page_range(struct binder_proc *proc, int allocate, void
 		proc->vma_need_update = 1;
 		vma = NULL;
 	}
-	else if (proc->vma_need_update)
-		binder_update_user_pages(proc);
 
 	if(vma == NULL && (binder_debug_mask & BINDER_DEBUG_USER_PAGES))
 		printk(KERN_INFO "binder: %d: %s pages %p-%p %p later\n",
@@ -677,6 +633,53 @@ err_alloc_page_failed:
 	if (vma)
 		up_write(&vma->vm_mm->mmap_sem);
 	return -ENOMEM;
+}
+
+static void binder_update_user_pages(struct binder_proc *proc)
+{
+	int i;
+	int ret;
+	struct page *page;
+	struct vm_area_struct *vma;
+	unsigned long addr;
+	
+	down_write(&current->mm->mmap_sem);
+	mutex_lock(&binder_lock);
+	vma = proc->vma;
+	if(binder_debug_mask & BINDER_DEBUG_USER_PAGES)
+		printk(KERN_INFO "binder: %d:%d update user pages for vma %p\n",
+			proc->pid, current->pid, vma);
+	if (!vma)
+		goto err_no_vma;
+	BUG_ON(!proc->pages);
+	for(i = 0; i < proc->buffer_size / PAGE_SIZE; i++) {
+		addr = vma->vm_start + i * PAGE_SIZE;
+		page = follow_page(vma, addr, 0);
+		if (page == proc->pages[i])
+			continue;
+		if (page) {
+			if(binder_debug_mask & BINDER_DEBUG_USER_PAGES)
+				printk(KERN_INFO "binder: %d:%d: unmap 0x%lx\n",
+					proc->pid, current->pid, addr);
+			zap_page_range(vma, addr, PAGE_SIZE, NULL);
+		}
+		if (proc->pages[i]) {
+			if(binder_debug_mask & BINDER_DEBUG_USER_PAGES)
+				printk(KERN_INFO "binder: %d:%d: map 0x%lx\n",
+					proc->pid, current->pid, addr);
+			ret = vm_insert_page(vma, addr, proc->pages[i]);
+			if(ret) {
+				printk(KERN_ERR "binder: %d: "
+					"binder_update_user_pages "
+					"failed to map page at %lx\n",
+					proc->pid, addr);
+			}
+		}
+	}
+err_no_vma:
+	proc->vma_need_update = 0;
+	mutex_unlock(&binder_lock);
+	up_write(&current->mm->mmap_sem);
 }
 
 static struct binder_buffer *binder_alloc_buf(struct binder_proc *proc, size_t data_size, size_t offsets_size, int is_async)
@@ -2572,13 +2575,8 @@ err:
 	mutex_unlock(&binder_lock);
 	wait_event_interruptible(binder_user_error_wait, binder_stop_on_user_error < 2);
 
-	if (proc->vma_need_update) {
-		down_write(&current->mm->mmap_sem);
-		mutex_lock(&binder_lock);
+	if (proc->vma_need_update)
 		binder_update_user_pages(proc);
-		mutex_unlock(&binder_lock);
-		up_write(&current->mm->mmap_sem);
-	}
 	
 	if(ret && ret != -ERESTARTSYS)
 		printk(KERN_INFO "binder: %d:%d ioctl %x %lx returned %d\n", proc->pid, current->pid, cmd, arg, ret);
