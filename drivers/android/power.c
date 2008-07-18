@@ -30,6 +30,7 @@
 #include <linux/console.h>
 #include <linux/kbd_kern.h>
 #include <linux/vt_kern.h>
+#include <linux/freezer.h>
 #ifdef CONFIG_ANDROID_POWER_STAT
 #include <linux/proc_fs.h>
 #endif
@@ -63,6 +64,7 @@ static void android_power_suspend(struct work_struct *work);
 static void android_power_wakeup_locked(int notification, ktime_t time);
 static DECLARE_WORK(g_suspend_work, android_power_suspend);
 static int g_max_user_lockouts = 16;
+
 //static const char g_free_user_lockout_name[] = "free_user";
 static struct {
 	enum {
@@ -78,6 +80,11 @@ android_suspend_lock_t g_deleted_wake_locks;
 android_suspend_lock_t g_no_wake_locks;
 #endif
 static struct kobject *android_power_kobj;
+#ifndef ANDROID_FRAMEBUFFER_CONSOLE
+static wait_queue_head_t fb_state_wq;
+static spinlock_t fb_state_lock = SPIN_LOCK_UNLOCKED;
+int fb_state;
+#endif
 
 #if 0
 android_suspend_lock_t *android_allocate_suspend_lock(const char *debug_name)
@@ -375,6 +382,7 @@ void android_unregister_early_suspend(android_early_suspend_t *handler)
 	mutex_unlock(&g_early_suspend_lock);
 }
 
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE
 static int orig_fgconsole;
 static void console_early_suspend(android_early_suspend_t *h)
 {
@@ -414,6 +422,44 @@ static android_early_suspend_t console_early_suspend_desc = {
 	.suspend = console_early_suspend,
 	.resume = console_late_resume,
 };
+#else
+/* tell userspace to stop drawing, wait for it to stop */
+static void stop_drawing_early_suspend(android_early_suspend_t *h)
+{
+	int ret;
+	unsigned long irq_flags;
+
+	spin_lock_irqsave(&fb_state_lock, irq_flags);
+	fb_state = ANDROID_REQUEST_STOP_DRAWING;
+	spin_unlock_irqrestore(&fb_state_lock, irq_flags);
+
+	wake_up_all(&fb_state_wq);
+	ret = wait_event_timeout(fb_state_wq,
+				 fb_state == ANDROID_STOPPED_DRAWING,
+				 HZ);
+	if (unlikely(fb_state != ANDROID_STOPPED_DRAWING))
+		printk(KERN_WARNING "android_power: timeout waiting for "
+		       "userspace to stop drawing\n");
+}
+
+/* tell userspace to start drawing */
+static void start_drawing_late_resume(android_early_suspend_t *h)
+{
+	unsigned long irq_flags;
+
+	spin_lock_irqsave(&fb_state_lock, irq_flags);
+	fb_state = ANDROID_DRAWING_OK;
+	spin_unlock_irqrestore(&fb_state_lock, irq_flags);
+	printk("drawing ok\n");
+	wake_up(&fb_state_wq);
+}
+
+static android_early_suspend_t stop_drawing_early_suspend_desc = {
+	.level = ANDROID_EARLY_SUSPEND_LEVEL_CONSOLE_SWITCH,
+	.suspend = stop_drawing_early_suspend,
+	.resume = start_drawing_late_resume,
+};
+#endif
 
 #if ANDROID_POWER_TEST_EARLY_SUSPEND
 
@@ -493,6 +539,7 @@ static int get_wait_timeout(int print_locks, int state, struct list_head *list_h
 	return max_timeout;
 }
 
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE
 static int android_power_class_suspend(struct sys_device *sdev, pm_message_t state)
 {
 	int rv = 0;
@@ -530,6 +577,7 @@ static int android_power_device_suspend(struct sys_device *sdev, pm_message_t st
 	spin_unlock_irqrestore(&g_list_lock, irqflags);
 	return rv;
 }
+#endif
 
 int android_power_is_driver_suspended(void)
 {
@@ -917,6 +965,45 @@ static ssize_t release_wake_lock_store(struct kobject *kobj, struct kobj_attribu
 	return n;
 }
 
+
+#ifndef CONFIG_FRAMEBUFFER_CONSOLE
+static ssize_t wait_for_fb_sleep_show(struct kobject *kobj,
+				      struct kobj_attribute *attr, char *buf)
+{
+	char * s = buf;
+	int ret;
+
+	ret = wait_event_freezable(fb_state_wq, fb_state != ANDROID_DRAWING_OK);
+	if (!ret) {
+		s += sprintf(buf, "sleeping");
+		return (s - buf);
+	} else
+		return -1;
+}
+
+static ssize_t wait_for_fb_wake_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+	char * s = buf;
+	int ret;
+	unsigned long irq_flags;
+	
+	spin_lock_irqsave(&fb_state_lock, irq_flags);
+	if (fb_state == ANDROID_REQUEST_STOP_DRAWING) {
+		fb_state = ANDROID_STOPPED_DRAWING;
+		wake_up(&fb_state_wq);
+	}
+	spin_unlock_irqrestore(&fb_state_lock, irq_flags);
+
+	ret = wait_event_freezable(fb_state_wq, fb_state == ANDROID_DRAWING_OK);
+	if (!ret) {
+		s += sprintf(buf, "awake");
+		return (s - buf);
+	} else
+		return -1;
+}
+#endif
+
 #define android_power_attr(_name) \
 static struct kobj_attribute _name##_attr = {	\
 	.attr	= {				\
@@ -927,11 +1014,25 @@ static struct kobj_attribute _name##_attr = {	\
 	.store	= _name##_store,		\
 }
 
+#define android_power_ro_attr(_name) \
+static struct kobj_attribute _name##_attr = {	\
+	.attr	= {				\
+		.name = __stringify(_name),	\
+		.mode = 0444,			\
+	},					\
+	.show	= _name##_show,			\
+	.store	= NULL,		\
+}
+
 android_power_attr(state);
 android_power_attr(request_state);
 android_power_attr(acquire_full_wake_lock);
 android_power_attr(acquire_partial_wake_lock);
 android_power_attr(release_wake_lock);
+#ifndef CONFIG_FRAMEBUFFER_CONSOLE
+android_power_ro_attr(wait_for_fb_sleep);
+android_power_ro_attr(wait_for_fb_wake);
+#endif
 
 static struct attribute * g[] = {
 	&state_attr.attr,
@@ -939,6 +1040,10 @@ static struct attribute * g[] = {
 	&acquire_full_wake_lock_attr.attr,
 	&acquire_partial_wake_lock_attr.attr,
 	&release_wake_lock_attr.attr,
+#ifndef CONFIG_FRAMEBUFFER_CONSOLE
+	&wait_for_fb_sleep_attr.attr,
+	&wait_for_fb_wake_attr.attr,
+#endif
 	NULL,
 };
 
@@ -997,6 +1102,8 @@ static int __init android_power_init(void)
 	g_deleted_wake_locks.stat.count = 0;
 #endif
 	init_waitqueue_head(&g_wait_queue);
+	init_waitqueue_head(&fb_state_wq);
+	fb_state = ANDROID_DRAWING_OK;
 
 	g_user_wake_locks = kzalloc(sizeof(*g_user_wake_locks) * g_max_user_lockouts, GFP_KERNEL);
 	if(g_user_wake_locks == NULL) {
@@ -1036,7 +1143,11 @@ static int __init android_power_init(void)
 			android_register_early_suspend(&early_suspend_tests[i].h);
 	}
 #endif
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE
 	android_register_early_suspend(&console_early_suspend_desc);
+#else
+	android_register_early_suspend(&stop_drawing_early_suspend_desc);
+#endif
 
 #if 0
 	ret = sysdev_class_register(&android_power_sysclass);
@@ -1075,7 +1186,11 @@ static void  __exit android_power_exit(void)
 //	g_android_power_sysclass = NULL;
 //	sysdev_unregister(&android_power_device.sysdev);
 //	sysdev_class_unregister(&android_power_sysclass);
+#ifdef CONFIG_FRAMEBUFFER_CONSOLE
 	android_unregister_early_suspend(&console_early_suspend_desc);
+#else
+	android_unregister_early_suspend(&stop_drawing_early_suspend_desc);
+#endif
 #ifdef CONFIG_ANDROID_POWER_STAT
 	remove_proc_entry("wakelocks", NULL);
 #endif
