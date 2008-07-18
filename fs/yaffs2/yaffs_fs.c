@@ -284,6 +284,7 @@ static struct file_operations yaffs_dir_operations = {
 
 static struct super_operations yaffs_super_ops = {
 	.statfs = yaffs_statfs,
+	.read_inode = yaffs_read_inode,
 	.put_inode = yaffs_put_inode,
 	.put_super = yaffs_put_super,
 	.delete_inode = yaffs_delete_inode,
@@ -843,11 +844,7 @@ struct inode *yaffs_get_inode(struct super_block *sb, int mode, int dev,
 	T(YAFFS_TRACE_OS,
 	  (KERN_DEBUG "yaffs_get_inode for object %d\n", obj->objectId));
 
-	inode = iget_locked(sb, obj->objectId);
-	if (!inode || !(inode->i_state & I_NEW))
-		return inode;
-	yaffs_read_inode(inode);
-	unlock_new_inode(inode);
+	inode = iget(sb, obj->objectId);
 
 	/* NB Side effect: iget calls back to yaffs_read_inode(). */
 	/* iget also increments the inode's i_count */
