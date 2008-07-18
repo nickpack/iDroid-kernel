@@ -90,7 +90,7 @@
 
 #define YAFFS_MAX_SHORT_OP_CACHES	20
 
-#define YAFFS_N_TEMP_BUFFERS		4
+#define YAFFS_N_TEMP_BUFFERS		6
 
 /* We limit the number attempts at sucessfully saving a chunk of data.
  * Small-page devices have 32 pages per block; large-page devices have 64.
@@ -300,11 +300,11 @@ typedef struct {
 
 	/* Apply to everything  */
 	int parentObjectId;
-	__u16 sum__NoLongerUsed;	/* checksum of name. No longer used */
-	YCHAR name[YAFFS_MAX_NAME_LENGTH + 1];
+        __u16 sum__NoLongerUsed;        /* checksum of name. No longer used */
+        YCHAR name[YAFFS_MAX_NAME_LENGTH + 1];
 
-	/* Thes following apply to directories, files, symlinks - not hard links */
-	__u32 yst_mode;		/* protection */
+        /* The following apply to directories, files, symlinks - not hard links */
+        __u32 yst_mode;         /* protection */
 
 #ifdef CONFIG_YAFFS_WINCE
 	__u32 notForWinCE[5];
@@ -331,11 +331,14 @@ typedef struct {
 	__u32 win_ctime[2];
 	__u32 win_atime[2];
 	__u32 win_mtime[2];
-	__u32 roomToGrow[4];
 #else
-	__u32 roomToGrow[10];
-#endif
+	__u32 roomToGrow[6];
 
+#endif
+	__u32 inbandShadowsObject;
+	__u32 inbandIsShrink;
+
+	__u32 reservedSpace[2];
 	int shadowsObject;	/* This object header shadows the specified object if > 0 */
 
 	/* isShrink applies to object headers written when we shrink the file (ie resize) */
@@ -381,7 +384,7 @@ typedef struct {
 } yaffs_FileStructure;
 
 typedef struct {
-	struct list_head children;	/* list of child links */
+        struct ylist_head children;     /* list of child links */
 } yaffs_DirectoryStructure;
 
 typedef struct {
@@ -422,19 +425,19 @@ struct yaffs_ObjectStruct {
 	__u8 serial;		/* serial number of chunk in NAND. Cached here */
 	__u16 sum;		/* sum of the name to speed searching */
 
-	struct yaffs_DeviceStruct *myDev;	/* The device I'm on */
+        struct yaffs_DeviceStruct *myDev;       /* The device I'm on */
 
-	struct list_head hashLink;	/* list of objects in this hash bucket */
+        struct ylist_head hashLink;     /* list of objects in this hash bucket */
 
-	struct list_head hardLinks;	/* all the equivalent hard linked objects */
+        struct ylist_head hardLinks;    /* all the equivalent hard linked objects */
 
-	/* directory structure stuff */
-	/* also used for linking up the free list */
-	struct yaffs_ObjectStruct *parent; 
-	struct list_head siblings;
+        /* directory structure stuff */
+        /* also used for linking up the free list */
+        struct yaffs_ObjectStruct *parent; 
+        struct ylist_head siblings;
 
 	/* Where's my object header in NAND? */
-	int chunkId;		
+	int hdrChunk;
 
 	int nDataChunks;	/* Number of data chunks attached to the file. */
 
@@ -485,8 +488,8 @@ struct yaffs_ObjectList_struct {
 typedef struct yaffs_ObjectList_struct yaffs_ObjectList;
 
 typedef struct {
-	struct list_head list;
-	int count;
+        struct ylist_head list;
+        int count;
 } yaffs_ObjectBucket;
 
 
@@ -498,8 +501,7 @@ typedef struct {
         int structType;
 	__u32 objectId;		
 	__u32 parentId;
-	int chunkId;
-			
+	int hdrChunk;
 	yaffs_ObjectType variantType:3;
 	__u8 deleted:1;		
 	__u8 softDeleted:1;	
@@ -528,23 +530,23 @@ typedef struct {
 /*----------------- Device ---------------------------------*/
 
 struct yaffs_DeviceStruct {
-	struct list_head devList;
-	const char *name;
+        struct ylist_head devList;
+        const char *name;
 
-	/* Entry parameters set up way early. Yaffs sets up the rest.*/
-	int nDataBytesPerChunk;	/* Should be a power of 2 >= 512 */
-	int nChunksPerBlock;	/* does not need to be a power of 2 */
-	int nBytesPerSpare;	/* spare area size */
-	int startBlock;		/* Start block we're allowed to use */
-	int endBlock;		/* End block we're allowed to use */
-	int nReservedBlocks;	/* We want this tuneable so that we can reduce */
+        /* Entry parameters set up way early. Yaffs sets up the rest.*/
+        int nDataBytesPerChunk; /* Should be a power of 2 >= 512 */
+        int nChunksPerBlock;    /* does not need to be a power of 2 */
+        int spareBytesPerChunk;/* spare area size */
+        int startBlock;         /* Start block we're allowed to use */
+        int endBlock;           /* End block we're allowed to use */
+        int nReservedBlocks;    /* We want this tuneable so that we can reduce */
 				/* reserved blocks on NOR and RAM. */
 	
 	
 	/* Stuff used by the shared space checkpointing mechanism */
 	/* If this value is zero, then this mechanism is disabled */
 	
-	int nCheckpointReservedBlocks; /* Blocks to reserve for checkpoint data */
+//	int nCheckpointReservedBlocks; /* Blocks to reserve for checkpoint data */
 
 	
 
@@ -583,7 +585,7 @@ struct yaffs_DeviceStruct {
 					  yaffs_ExtendedTags * tags);
 	int (*markNANDBlockBad) (struct yaffs_DeviceStruct * dev, int blockNo);
 	int (*queryNANDBlock) (struct yaffs_DeviceStruct * dev, int blockNo,
-			       yaffs_BlockState * state, int *sequenceNumber);
+			       yaffs_BlockState * state, __u32 *sequenceNumber);
 #endif
 
 	int isYaffs2;
@@ -598,6 +600,8 @@ struct yaffs_DeviceStruct {
 	void (*markSuperBlockDirty)(void * superblock);
 	
 	int wideTnodesDisabled; /* Set to disable wide tnodes */
+	
+	YCHAR *pathDividers;	/* String of legal path dividers */
 	
 
 	/* End of stuff that must be set before initialisation. */
@@ -615,16 +619,14 @@ struct yaffs_DeviceStruct {
 	__u32 tnodeWidth;
 	__u32 tnodeMask;
 	
-	/* Stuff to support various file offses to chunk/offset translations */
-	/* "Crumbs" for nDataBytesPerChunk not being a power of 2 */
-	__u32 crumbMask;
-	__u32 crumbShift;
-	__u32 crumbsPerChunk;
-	
-	/* Straight shifting for nDataBytesPerChunk being a power of 2 */
-	__u32 chunkShift;
-	__u32 chunkMask;
-	
+	/* Stuff for figuring out file offset to chunk conversions */
+	__u32 chunkShift; /* Shift value */
+	__u32 chunkDiv;   /* Divisor after shifting: 1 for power-of-2 sizes */
+	__u32 chunkMask;  /* Mask to use for power-of-2 case */
+
+	/* Stuff to handle inband tags */
+	int inbandTags;
+	__u32 totalBytesPerChunk;
 
 #ifdef __KERNEL__
 
@@ -663,6 +665,8 @@ struct yaffs_DeviceStruct {
 	__u32 checkpointSum;
 	__u32 checkpointXor;
 	
+	int nCheckpointBlocksRequired; /* Number of blocks needed to store current checkpoint set */
+	
 	/* Block Info */
 	yaffs_BlockInfo *blockInfo;
 	__u8 *chunkBits;	/* bitmap of chunks in use */
@@ -688,6 +692,8 @@ struct yaffs_DeviceStruct {
 	int nObjectsCreated;
 	yaffs_Object *freeObjects;
 	int nFreeObjects;
+	
+	int nHardLinks;
 
 	yaffs_ObjectList *allocatedObjectList;
 
@@ -744,9 +750,11 @@ struct yaffs_DeviceStruct {
 	int nUnlinkedFiles;		/* Count of unlinked files. */
 	int nBackgroundDeletions;	/* Count of background deletions. */
 
-
+	
+	/* Temporary buffer management */
 	yaffs_TempBuffer tempBuffer[YAFFS_N_TEMP_BUFFERS];
 	int maxTemp;
+	int tempInUse;
 	int unmanagedTempAllocations;
 	int unmanagedTempDeallocations;
 
@@ -758,10 +766,10 @@ struct yaffs_DeviceStruct {
 
 typedef struct yaffs_DeviceStruct yaffs_Device;
 
-/* The static layout of bllock usage etc is stored in the super block header */
+/* The static layout of block usage etc is stored in the super block header */
 typedef struct {
         int StructType;
-	int version;
+        int version;
 	int checkpointStartBlock;
 	int checkpointEndBlock;
 	int startBlock;
@@ -797,18 +805,6 @@ typedef struct {
     __u32 head;
 } yaffs_CheckpointValidity;
 
-/* Function to manipulate block info */
-static Y_INLINE yaffs_BlockInfo *yaffs_GetBlockInfo(yaffs_Device * dev, int blk)
-{
-	if (blk < dev->internalStartBlock || blk > dev->internalEndBlock) {
-		T(YAFFS_TRACE_ERROR,
-		  (TSTR
-		   ("**>> yaffs: getBlockInfo block %d is not valid" TENDSTR),
-		   blk));
-		YBUG();
-	}
-	return &dev->blockInfo[blk - dev->internalStartBlock];
-}
 
 /*----------------------- YAFFS Functions -----------------------*/
 
@@ -834,13 +830,13 @@ int yaffs_GetAttributes(yaffs_Object * obj, struct iattr *attr);
 
 /* File operations */
 int yaffs_ReadDataFromFile(yaffs_Object * obj, __u8 * buffer, loff_t offset,
-			   int nBytes);
+                           int nBytes);
 int yaffs_WriteDataToFile(yaffs_Object * obj, const __u8 * buffer, loff_t offset,
-			  int nBytes, int writeThrough);
+                          int nBytes, int writeThrough);
 int yaffs_ResizeFile(yaffs_Object * obj, loff_t newSize);
 
 yaffs_Object *yaffs_MknodFile(yaffs_Object * parent, const YCHAR * name,
-			      __u32 mode, __u32 uid, __u32 gid);
+                              __u32 mode, __u32 uid, __u32 gid);
 int yaffs_FlushFile(yaffs_Object * obj, int updateTime);
 
 /* Flushing and checkpointing */
@@ -898,5 +894,8 @@ void yaffs_InitialiseTags(yaffs_ExtendedTags * tags);
 void yaffs_DeleteChunk(yaffs_Device * dev, int chunkId, int markNAND, int lyn);
 int yaffs_CheckFF(__u8 * buffer, int nBytes);
 void yaffs_HandleChunkError(yaffs_Device *dev, yaffs_BlockInfo *bi);
+
+__u8 *yaffs_GetTempBuffer(yaffs_Device * dev, int lineNo);
+void yaffs_ReleaseTempBuffer(yaffs_Device * dev, __u8 * buffer, int lineNo);
 
 #endif
