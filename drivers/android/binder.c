@@ -881,7 +881,10 @@ binder_inc_node(struct binder_node *node, int strong, int internal, struct list_
 {
 	if(strong) {
 		if(internal) {
-			if(target_list == NULL && node->internal_strong_refs == 0) {
+			if (target_list == NULL &&
+			    node->internal_strong_refs == 0 &&
+			    !(node == binder_context_mgr_node &&
+			    node->has_strong_ref) ) {
 				printk(KERN_ERR "binder: invalid inc strong node for %d\n", node->debug_id);
 				return -EINVAL;
 			}
@@ -1000,7 +1003,7 @@ binder_get_ref_for_node(struct binder_proc *proc, struct binder_node *node)
 	rb_link_node(&new_ref->rb_node_node, parent, p);
 	rb_insert_color(&new_ref->rb_node_node, &proc->refs_by_node);
 
-	new_ref->desc = 1;
+	new_ref->desc = (node == binder_context_mgr_node) ? 0 : 1;
 	for(n = rb_first(&proc->refs_by_desc); n != NULL; n = rb_next(n)) {
 		ref = rb_entry(n, struct binder_ref, rb_node_desc);
 		if(ref->desc > new_ref->desc)
@@ -1657,7 +1660,21 @@ binder_thread_write(struct binder_proc *proc, struct binder_thread *thread, void
 				if(get_user(target, (uint32_t __user *)ptr))
 					return -EFAULT;
 				ptr += sizeof(uint32_t);
-				ref = binder_get_ref(proc, target);
+				if (target == 0 && binder_context_mgr_node &&
+				    (cmd == bcINCREFS || cmd == bcACQUIRE)) {
+					ref = binder_get_ref_for_node(proc,
+						       binder_context_mgr_node);
+					if (ref->desc != target) {
+						binder_user_error("binder: %d:"
+							"%d tried to acquire "
+							"reference to desc 0, "
+							"got %d instead\n",
+							proc->pid, thread->pid,
+							ref->desc);
+					}
+				}
+				else
+					ref = binder_get_ref(proc, target);
 				if(ref == NULL) {
 					binder_user_error("binder: %d:%d refcou"
 						"nt change on invalid ref %d\n",
