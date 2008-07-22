@@ -80,7 +80,7 @@ android_suspend_lock_t g_deleted_wake_locks;
 android_suspend_lock_t g_no_wake_locks;
 #endif
 static struct kobject *android_power_kobj;
-#ifndef ANDROID_FRAMEBUFFER_CONSOLE
+#ifndef CONFIG_FRAMEBUFFER_CONSOLE
 static wait_queue_head_t fb_state_wq;
 static spinlock_t fb_state_lock = SPIN_LOCK_UNLOCKED;
 int fb_state;
@@ -1102,8 +1102,10 @@ static int __init android_power_init(void)
 	g_deleted_wake_locks.stat.count = 0;
 #endif
 	init_waitqueue_head(&g_wait_queue);
+#ifndef CONFIG_FRAMEBUFFER_CONSOLE
 	init_waitqueue_head(&fb_state_wq);
 	fb_state = ANDROID_DRAWING_OK;
+#endif
 
 	g_user_wake_locks = kzalloc(sizeof(*g_user_wake_locks) * g_max_user_lockouts, GFP_KERNEL);
 	if(g_user_wake_locks == NULL) {
