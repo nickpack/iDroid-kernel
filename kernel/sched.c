@@ -596,6 +596,7 @@ enum {
 	SCHED_FEAT_START_DEBIT		= 4,
 	SCHED_FEAT_HRTICK		= 8,
 	SCHED_FEAT_DOUBLE_TICK		= 16,
+	SCHED_FEAT_NORMALIZED_SLEEPER	= 32,
 };
 
 const_debug unsigned int sysctl_sched_features =
@@ -603,7 +604,8 @@ const_debug unsigned int sysctl_sched_features =
 		SCHED_FEAT_WAKEUP_PREEMPT	* 1 |
 		SCHED_FEAT_START_DEBIT		* 1 |
 		SCHED_FEAT_HRTICK		* 1 |
-		SCHED_FEAT_DOUBLE_TICK		* 0;
+		SCHED_FEAT_DOUBLE_TICK		* 0 |
+		SCHED_FEAT_NORMALIZED_SLEEPER	* 1;
 
 #define sched_feat(x) (sysctl_sched_features & SCHED_FEAT_##x)
 
