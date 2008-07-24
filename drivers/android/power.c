@@ -450,7 +450,6 @@ static void start_drawing_late_resume(android_early_suspend_t *h)
 	spin_lock_irqsave(&fb_state_lock, irq_flags);
 	fb_state = ANDROID_DRAWING_OK;
 	spin_unlock_irqrestore(&fb_state_lock, irq_flags);
-	printk("drawing ok\n");
 	wake_up(&fb_state_wq);
 }
 
@@ -973,12 +972,13 @@ static ssize_t wait_for_fb_sleep_show(struct kobject *kobj,
 	char * s = buf;
 	int ret;
 
-	ret = wait_event_freezable(fb_state_wq, fb_state != ANDROID_DRAWING_OK);
-	if (!ret) {
+	ret = wait_event_interruptible(fb_state_wq,
+				       fb_state != ANDROID_DRAWING_OK);
+	if (ret && fb_state == ANDROID_DRAWING_OK)
+		return ret;
+	else
 		s += sprintf(buf, "sleeping");
-		return (s - buf);
-	} else
-		return -1;
+	return (s - buf);
 }
 
 static ssize_t wait_for_fb_wake_show(struct kobject *kobj,
@@ -995,12 +995,14 @@ static ssize_t wait_for_fb_wake_show(struct kobject *kobj,
 	}
 	spin_unlock_irqrestore(&fb_state_lock, irq_flags);
 
-	ret = wait_event_freezable(fb_state_wq, fb_state == ANDROID_DRAWING_OK);
-	if (!ret) {
+	ret = wait_event_interruptible(fb_state_wq,
+				       fb_state == ANDROID_DRAWING_OK);
+	if (ret && fb_state != ANDROID_DRAWING_OK)
+		return ret;
+	else
 		s += sprintf(buf, "awake");
-		return (s - buf);
-	} else
-		return -1;
+
+	return (s - buf);
 }
 #endif
 
