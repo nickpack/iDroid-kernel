@@ -82,11 +82,14 @@ typedef enum {
 /* void android_free_suspend_lock(android_suspend_lock_t *lock); */
 int android_init_suspend_lock(android_suspend_lock_t *lock);
 void android_uninit_suspend_lock(android_suspend_lock_t *lock);
+void android_lock_idle(android_suspend_lock_t *lock);
+void android_lock_idle_auto_expire(android_suspend_lock_t *lock, int timeout);
 void android_lock_suspend(android_suspend_lock_t *lock);
 void android_lock_suspend_auto_expire(android_suspend_lock_t *lock, int timeout);
 void android_unlock_suspend(android_suspend_lock_t *lock);
 
 int android_power_is_driver_suspended(void);
+int android_power_is_low_power_idle_ok(void);
 
 void android_register_early_suspend(android_early_suspend_t *handler);
 void android_unregister_early_suspend(android_early_suspend_t *handler);

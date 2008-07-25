@@ -50,6 +50,7 @@ static DEFINE_MUTEX(g_early_suspend_lock);
 wait_queue_head_t g_wait_queue;
 
 static LIST_HEAD(g_inactive_locks);
+static LIST_HEAD(g_active_idle_wake_locks);
 static LIST_HEAD(g_active_partial_wake_locks);
 static LIST_HEAD(g_active_full_wake_locks);
 static LIST_HEAD(g_early_suspend_handlers);
@@ -154,6 +155,42 @@ void android_uninit_suspend_lock(android_suspend_lock_t *lock)
 #endif
 	list_del(&lock->link);
 	spin_unlock_irqrestore(&g_list_lock, irqflags);	
+}
+
+void android_lock_idle(android_suspend_lock_t *lock)
+{
+	unsigned long irqflags;
+	//printk("android_lock_suspend name=%s\n", lock->name);
+	spin_lock_irqsave(&g_list_lock, irqflags);
+#ifdef CONFIG_ANDROID_POWER_STAT
+	if(!(lock->flags & ANDROID_SUSPEND_LOCK_ACTIVE)) {
+		lock->flags |= ANDROID_SUSPEND_LOCK_ACTIVE;
+		lock->stat.last_time = ktime_get();
+	}
+#endif
+	lock->expires = INT_MAX;
+	lock->flags &= ~ANDROID_SUSPEND_LOCK_AUTO_EXPIRE;
+	list_del(&lock->link);
+	list_add(&lock->link, &g_active_idle_wake_locks);
+	spin_unlock_irqrestore(&g_list_lock, irqflags);
+}
+
+void android_lock_idle_auto_expire(android_suspend_lock_t *lock, int timeout)
+{
+	unsigned long irqflags;
+	//printk("android_lock_suspend name=%s\n", lock->name);
+	spin_lock_irqsave(&g_list_lock, irqflags);
+#ifdef CONFIG_ANDROID_POWER_STAT
+	if(!(lock->flags & ANDROID_SUSPEND_LOCK_ACTIVE)) {
+		lock->flags |= ANDROID_SUSPEND_LOCK_ACTIVE;
+		lock->stat.last_time = ktime_get();
+	}
+#endif
+	lock->expires = jiffies + timeout;
+	lock->flags |= ANDROID_SUSPEND_LOCK_AUTO_EXPIRE;
+	list_del(&lock->link);
+	list_add(&lock->link, &g_active_idle_wake_locks);
+	spin_unlock_irqrestore(&g_list_lock, irqflags);
 }
 
 void android_lock_suspend(android_suspend_lock_t *lock)
@@ -581,6 +618,12 @@ static int android_power_device_suspend(struct sys_device *sdev, pm_message_t st
 int android_power_is_driver_suspended(void)
 {
 	return (get_wait_timeout(0, USER_SLEEP, &g_active_partial_wake_locks) < 0) && (g_user_suspend_state == USER_SLEEP);
+}
+
+int android_power_is_low_power_idle_ok(void)
+{
+	get_wait_timeout(0, USER_SLEEP, &g_active_idle_wake_locks);
+	return list_empty(&g_active_idle_wake_locks);
 }
 
 static void android_power_suspend(struct work_struct *work)
