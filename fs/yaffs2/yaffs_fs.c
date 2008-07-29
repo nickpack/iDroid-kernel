@@ -1615,8 +1615,8 @@ static void yaffs_MarkSuperBlockDirty(void *vsb)
 	struct super_block *sb = (struct super_block *)vsb;
 
 	T(YAFFS_TRACE_OS, (KERN_DEBUG "yaffs_MarkSuperBlockDirty() sb = %p\n",sb));
-//	if(sb)
-//		sb->s_dirt = 1;
+	if(sb)
+		sb->s_dirt = 1;
 }
 
 typedef struct {
@@ -1958,6 +1958,9 @@ static struct super_block *yaffs_internal_read_super(int yaffsVersion,
 		return NULL;
 	}
 	sb->s_root = root;
+	sb->s_dirt = !dev->isCheckpointed;
+	T(YAFFS_TRACE_ALWAYS,
+	  ("yaffs_read_super: isCheckpointed %d\n", dev->isCheckpointed));
 
 	T(YAFFS_TRACE_OS, ("yaffs_read_super: done\n"));
 	return sb;
