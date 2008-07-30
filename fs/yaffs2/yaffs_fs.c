@@ -97,14 +97,17 @@ extern const char *yaffs_guts_c_version;
 
 unsigned int yaffs_traceMask = YAFFS_TRACE_BAD_BLOCKS;
 unsigned int yaffs_wr_attempts = YAFFS_WR_ATTEMPTS;
+unsigned int yaffs_auto_checkpoint = 1;
 
 /* Module Parameters */
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(2,5,0))
 module_param(yaffs_traceMask,uint,0644);
 module_param(yaffs_wr_attempts,uint,0644);
+module_param(yaffs_auto_checkpoint,uint,0644);
 #else
 MODULE_PARM(yaffs_traceMask,"i");
 MODULE_PARM(yaffs_wr_attempts,"i");
+MODULE_PARM(yaffs_auto_checkpoint,"i");
 #endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,25))
@@ -1450,7 +1453,8 @@ static int yaffs_write_super(struct super_block *sb)
 {
 
 	T(YAFFS_TRACE_OS, (KERN_DEBUG "yaffs_write_super\n"));
-	yaffs_do_sync_fs(sb);
+	if (yaffs_auto_checkpoint >= 2)
+		yaffs_do_sync_fs(sb);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18))
 	return 0; 
 #endif
@@ -1466,7 +1470,8 @@ static int yaffs_sync_fs(struct super_block *sb)
 
 	T(YAFFS_TRACE_OS, (KERN_DEBUG "yaffs_sync_fs\n"));
 
-	yaffs_do_sync_fs(sb);
+	if (yaffs_auto_checkpoint >= 1)
+		yaffs_do_sync_fs(sb);
 	
 	return 0; 
 
