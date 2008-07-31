@@ -23,6 +23,7 @@
 #include <linux/interrupt.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
+#include <linux/rtc.h>
 #include <linux/wait.h>
 #include <linux/android_power.h>
 #include <linux/suspend.h>
@@ -35,8 +36,19 @@
 #include <linux/proc_fs.h>
 #endif
 
+enum {
+	ANDROID_POWER_DEBUG_USER_STATE = 1U << 0,
+	ANDROID_POWER_DEBUG_EXIT_SUSPEND = 1U << 1,
+	ANDROID_POWER_DEBUG_SUSPEND = 1U << 2,
+	ANDROID_POWER_DEBUG_USER_WAKE_LOCK = 1U << 3,
+	ANDROID_POWER_DEBUG_WAKE_LOCK = 1U << 4,
+};
+static int android_power_debug_mask =
+	ANDROID_POWER_DEBUG_USER_STATE | ANDROID_POWER_DEBUG_EXIT_SUSPEND;
+module_param_named(debug_mask, android_power_debug_mask,
+			int, S_IRUGO | S_IWUSR | S_IWGRP);
+
 #define ANDROID_POWER_TEST_EARLY_SUSPEND 0
-#define ANDROID_POWER_PRINT_USER_WAKE_LOCKS 0
 
 MODULE_DESCRIPTION("OMAP CSMI Driver");
 MODULE_LICENSE("GPL");
@@ -111,12 +123,15 @@ int android_init_suspend_lock(android_suspend_lock_t *lock)
 	unsigned long irqflags;
 
 	if(lock->name == NULL) {
-		printk("android_init_suspend_lock: error name=NULL, lock=%p\n", lock);
+		printk(KERN_ERR "android_init_suspend_lock: error name=NULL, "
+			"lock=%p\n", lock);
 		dump_stack();
 		return -EINVAL;
 	}
 
-	//printk("android_init_suspend_lock name=%s\n", lock->name);
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_WAKE_LOCK)
+		printk(KERN_INFO "android_init_suspend_lock name=%s\n",
+			lock->name);
 #ifdef CONFIG_ANDROID_POWER_STAT
 	lock->stat.count = 0;
 	lock->stat.expire_count = 0;
@@ -139,7 +154,9 @@ int android_init_suspend_lock(android_suspend_lock_t *lock)
 void android_uninit_suspend_lock(android_suspend_lock_t *lock)
 {
 	unsigned long irqflags;
-	//printk("android_uninit_suspend_lock name=%s\n", lock->name);
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_WAKE_LOCK)
+		printk(KERN_INFO "android_uninit_suspend_lock name=%s\n",
+			lock->name);
 	spin_lock_irqsave(&g_list_lock, irqflags);
 #ifdef CONFIG_ANDROID_POWER_STAT
 	if(lock->stat.count) {
@@ -160,7 +177,6 @@ void android_uninit_suspend_lock(android_suspend_lock_t *lock)
 void android_lock_idle(android_suspend_lock_t *lock)
 {
 	unsigned long irqflags;
-	//printk("android_lock_suspend name=%s\n", lock->name);
 	spin_lock_irqsave(&g_list_lock, irqflags);
 #ifdef CONFIG_ANDROID_POWER_STAT
 	if(!(lock->flags & ANDROID_SUSPEND_LOCK_ACTIVE)) {
@@ -168,6 +184,9 @@ void android_lock_idle(android_suspend_lock_t *lock)
 		lock->stat.last_time = ktime_get();
 	}
 #endif
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_WAKE_LOCK)
+		printk(KERN_INFO "android_power: acquire idle wake lock: %s\n",
+			lock->name);
 	lock->expires = INT_MAX;
 	lock->flags &= ~ANDROID_SUSPEND_LOCK_AUTO_EXPIRE;
 	list_del(&lock->link);
@@ -178,7 +197,6 @@ void android_lock_idle(android_suspend_lock_t *lock)
 void android_lock_idle_auto_expire(android_suspend_lock_t *lock, int timeout)
 {
 	unsigned long irqflags;
-	//printk("android_lock_suspend name=%s\n", lock->name);
 	spin_lock_irqsave(&g_list_lock, irqflags);
 #ifdef CONFIG_ANDROID_POWER_STAT
 	if(!(lock->flags & ANDROID_SUSPEND_LOCK_ACTIVE)) {
@@ -186,6 +204,10 @@ void android_lock_idle_auto_expire(android_suspend_lock_t *lock, int timeout)
 		lock->stat.last_time = ktime_get();
 	}
 #endif
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_WAKE_LOCK)
+		printk(KERN_INFO "android_power: acquire idle wake lock: %s, "
+			"timeout %d.%03lu\n", lock->name, timeout / HZ,
+			(timeout % HZ) * MSEC_PER_SEC / HZ);
 	lock->expires = jiffies + timeout;
 	lock->flags |= ANDROID_SUSPEND_LOCK_AUTO_EXPIRE;
 	list_del(&lock->link);
@@ -196,7 +218,6 @@ void android_lock_idle_auto_expire(android_suspend_lock_t *lock, int timeout)
 void android_lock_suspend(android_suspend_lock_t *lock)
 {
 	unsigned long irqflags;
-	//printk("android_lock_suspend name=%s\n", lock->name);
 	spin_lock_irqsave(&g_list_lock, irqflags);
 #ifdef CONFIG_ANDROID_POWER_STAT
 	if(!(lock->flags & ANDROID_SUSPEND_LOCK_ACTIVE)) {
@@ -204,6 +225,9 @@ void android_lock_suspend(android_suspend_lock_t *lock)
 		lock->stat.last_time = ktime_get();
 	}
 #endif
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_WAKE_LOCK)
+		printk(KERN_INFO "android_power: acquire wake lock: %s\n",
+			lock->name);
 	lock->expires = INT_MAX;
 	lock->flags &= ~ANDROID_SUSPEND_LOCK_AUTO_EXPIRE;
 	list_del(&lock->link);
@@ -215,7 +239,6 @@ void android_lock_suspend(android_suspend_lock_t *lock)
 void android_lock_suspend_auto_expire(android_suspend_lock_t *lock, int timeout)
 {
 	unsigned long irqflags;
-	//printk("android_lock_suspend name=%s\n", lock->name);
 	spin_lock_irqsave(&g_list_lock, irqflags);
 #ifdef CONFIG_ANDROID_POWER_STAT
 	if(!(lock->flags & ANDROID_SUSPEND_LOCK_ACTIVE)) {
@@ -223,6 +246,10 @@ void android_lock_suspend_auto_expire(android_suspend_lock_t *lock, int timeout)
 		lock->stat.last_time = ktime_get();
 	}
 #endif
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_WAKE_LOCK)
+		printk(KERN_INFO "android_power: acquire wake lock: %s, "
+			"timeout %d.%03lu\n", lock->name, timeout / HZ,
+			(timeout % HZ) * MSEC_PER_SEC / HZ);
 	lock->expires = jiffies + timeout;
 	lock->flags |= ANDROID_SUSPEND_LOCK_AUTO_EXPIRE;
 	list_del(&lock->link);
@@ -235,7 +262,6 @@ void android_lock_suspend_auto_expire(android_suspend_lock_t *lock, int timeout)
 void android_lock_partial_suspend_auto_expire(android_suspend_lock_t *lock, int timeout)
 {
 	unsigned long irqflags;
-	//printk("android_lock_suspend name=%s\n", lock->name);
 	spin_lock_irqsave(&g_list_lock, irqflags);
 #ifdef CONFIG_ANDROID_POWER_STAT
 	if(!(lock->flags & ANDROID_SUSPEND_LOCK_ACTIVE)) {
@@ -243,6 +269,10 @@ void android_lock_partial_suspend_auto_expire(android_suspend_lock_t *lock, int 
 		lock->stat.last_time = ktime_get();
 	}
 #endif
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_WAKE_LOCK)
+		printk(KERN_INFO "android_power: acquire full wake lock: %s, "
+			"timeout %d.%03lu\n", lock->name, timeout / HZ,
+			(timeout % HZ) * MSEC_PER_SEC / HZ);
 	lock->expires = jiffies + timeout;
 	lock->flags |= ANDROID_SUSPEND_LOCK_AUTO_EXPIRE;
 	list_del(&lock->link);
@@ -324,11 +354,13 @@ void android_unlock_suspend(android_suspend_lock_t *lock)
 {
 	int had_full_wake_locks;
 	unsigned long irqflags;
-	//printk("android_unlock_suspend name=%s\n", lock->name);
 	spin_lock_irqsave(&g_list_lock, irqflags);
 #ifdef CONFIG_ANDROID_POWER_STAT
 	android_unlock_suspend_stat_locked(lock);
 #endif
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_WAKE_LOCK)
+		printk(KERN_INFO "android_power: release wake lock: %s\n",
+			lock->name);
 	lock->flags &= ~ANDROID_SUSPEND_LOCK_AUTO_EXPIRE;
 	had_full_wake_locks = !list_empty(&g_active_full_wake_locks);
 	list_del(&lock->link);
@@ -348,10 +380,22 @@ void android_unlock_suspend(android_suspend_lock_t *lock)
 static void android_power_wakeup_locked(int notification, ktime_t time)
 {
 	int new_state = (notification == 0) ? USER_AWAKE : USER_NOTIFICATION;
+
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_USER_STATE) {
+		struct timespec ts;
+		struct rtc_time tm;
+		getnstimeofday(&ts);
+		rtc_time_to_tm(ts.tv_sec, &tm);
+		printk(KERN_INFO "android_power: wakeup (%d->%d) at %lld "
+			"(%d-%02d-%02d %02d:%02d:%02d.%09lu UTC)\n",
+			g_user_suspend_state, new_state, ktime_to_ns(time),
+			tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+			tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+	}
+
 	if(new_state >= g_user_suspend_state) {
 		return;
 	}
-	printk("android_power_wakeup %d->%d at %lld\n", g_user_suspend_state, new_state, ktime_to_ns(time));
 	g_user_suspend_state = new_state;
 	g_current_event_num++;
 	wake_up(&g_wait_queue);
@@ -374,15 +418,24 @@ static void android_power_request_sleep(void)
 	unsigned long irqflags;
 	int already_suspended;
 	android_suspend_lock_t *lock, *next_lock;
-	ktime_t ktime_now;
 
-	ktime_now = ktime_get();
-	printk("android_power_suspend: %lld\n", ktime_to_ns(ktime_now));
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_USER_STATE) {
+		ktime_t ktime_now;
+		struct timespec ts;
+		struct rtc_time tm;
+		ktime_now = ktime_get();
+		getnstimeofday(&ts);
+		rtc_time_to_tm(ts.tv_sec, &tm);
+		printk(KERN_INFO "android_power: sleep (%d->%d) at %lld "
+		       "(%d-%02d-%02d %02d:%02d:%02d.%09lu UTC)\n",
+		       g_user_suspend_state, USER_SLEEP, ktime_to_ns(ktime_now),
+		       tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+		       tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+	}
 
 	spin_lock_irqsave(&g_list_lock, irqflags);
 	already_suspended = g_user_suspend_state == USER_SLEEP;
 	if(!already_suspended) {
-		printk("android sleep state %d->%d at %lld\n", g_user_suspend_state, USER_SLEEP, ktime_to_ns(ktime_now));
 		g_user_suspend_state = USER_SLEEP;
 	}
 
@@ -554,7 +607,7 @@ static int get_wait_timeout(int print_locks, int state, struct list_head *list_h
 #endif
 				list_del(&lock->link);
 				list_add(&lock->link, &g_inactive_locks);
-				if(!print_locks) // print wake locks that expire while waiting to enter sleep
+				if (android_power_debug_mask & ANDROID_POWER_DEBUG_WAKE_LOCK)
 					printk("expired wake lock %s\n", lock->name);
 			}
 			else {
@@ -632,7 +685,7 @@ static void android_power_suspend(struct work_struct *work)
 	int ret;
 	int wait = 0;
 	android_early_suspend_t *pos;
-	int print_locks;
+	int print_locks = 0;
 	unsigned long irqflags;
 
 	while(g_user_suspend_state != USER_AWAKE) {
@@ -673,7 +726,8 @@ static void android_power_suspend(struct work_struct *work)
 				wait_event_interruptible_timeout(g_wait_queue, g_user_suspend_state != USER_SLEEP, wait);
 				wait = 0;
 			}
-			print_locks = 1;
+			if (android_power_debug_mask & ANDROID_POWER_DEBUG_SUSPEND)
+				print_locks = 1;
 			while(1) {
 				wait = get_wait_timeout(print_locks, USER_SLEEP, &g_active_partial_wake_locks);
 				print_locks = 0;
@@ -690,11 +744,22 @@ static void android_power_suspend(struct work_struct *work)
 			if(g_user_suspend_state != USER_SLEEP)
 				break;
 			sys_sync();
-			printk("android_power_suspend: enter suspend\n");
+			if (android_power_debug_mask & ANDROID_POWER_DEBUG_SUSPEND)
+				printk(KERN_INFO "android_power_suspend: enter suspend\n");
 			ret = pm_suspend(PM_SUSPEND_MEM);
-			printk("android_power_suspend: exit suspend, ret = %d\n", ret);
+			if (android_power_debug_mask & ANDROID_POWER_DEBUG_EXIT_SUSPEND) {
+				struct timespec ts;
+				struct rtc_time tm;
+				getnstimeofday(&ts);
+				rtc_time_to_tm(ts.tv_sec, &tm);
+				printk("android_power_suspend: exit suspend, ret = %d "
+					"(%d-%02d-%02d %02d:%02d:%02d.%09lu UTC)\n", ret,
+					tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+					tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec);
+			}
 			if(g_current_event_num == entry_event_num) {
-				printk("android_power_suspend: pm_suspend returned with no event\n");
+				if (android_power_debug_mask & ANDROID_POWER_DEBUG_SUSPEND)
+					printk(KERN_INFO "android_power_suspend: pm_suspend returned with no event\n");
 				wait = HZ / 2;
 #ifdef CONFIG_ANDROID_POWER_STAT
 				if(g_no_wake_locks.stat.count == 0) {
@@ -710,7 +775,8 @@ static void android_power_suspend(struct work_struct *work)
 #endif
 			}
 		}
-		printk("android_power_suspend: done\n");
+		if (android_power_debug_mask & ANDROID_POWER_DEBUG_USER_STATE)
+			printk("android_power_suspend: done\n");
 		//printk("android_power_suspend: call late resume handlers\n");
 		list_for_each_entry_reverse(pos, &g_early_suspend_handlers, link) {
 			if(pos->resume != NULL)
@@ -874,9 +940,8 @@ static int lookup_wake_lock_name(const char *buf, size_t n, int allocate, int *t
 		strcpy(g_user_wake_locks[i].name_buffer, name);
 		return i;
 	}
-#if ANDROID_POWER_PRINT_USER_WAKE_LOCKS
-	printk("lookup_wake_lock_name: %s not found\n", name);
-#endif
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_USER_WAKE_LOCK)
+		printk(KERN_INFO "lookup_wake_lock_name: %s not found\n", name);
 	return -EINVAL;
 }
 
@@ -911,9 +976,9 @@ static ssize_t acquire_full_wake_lock_store(struct kobject *kobj, struct kobj_at
 	if(i < 0)
 		return i;
 
-#if ANDROID_POWER_PRINT_USER_WAKE_LOCKS
-	printk("acquire_full_wake_lock_store: %s, size %d\n", g_user_wake_locks[i].name_buffer, n);
-#endif
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_USER_WAKE_LOCK)
+		printk(KERN_INFO "acquire_full_wake_lock_store: %s, size %d\n",
+			g_user_wake_locks[i].name_buffer, n);
 
 	//android_lock_partial_suspend_auto_expire(&g_user_wake_locks[i].suspend_lock, ktime_to_timespec(g_auto_off_timeout).tv_sec * HZ);
 	if(timeout == 0)
@@ -954,9 +1019,9 @@ static ssize_t acquire_partial_wake_lock_store(struct kobject *kobj, struct kobj
 	if(i < 0)
 		return 0;
 
-#if ANDROID_POWER_PRINT_USER_WAKE_LOCKS
-	printk("acquire_partial_wake_lock_store: %s, size %d\n", g_user_wake_locks[i].name_buffer, n);
-#endif
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_USER_WAKE_LOCK)
+		printk(KERN_INFO "acquire_partial_wake_lock_store: %s, "
+			"size %d\n", g_user_wake_locks[i].name_buffer, n);
 
 	if(timeout)
 		android_lock_suspend_auto_expire(&g_user_wake_locks[i].suspend_lock, timeout);
@@ -999,9 +1064,9 @@ static ssize_t release_wake_lock_store(struct kobject *kobj, struct kobj_attribu
 	if(i < 0)
 		return i;
 
-#if ANDROID_POWER_PRINT_USER_WAKE_LOCKS
-	printk("release_wake_lock_store: %s, size %d\n", g_user_wake_locks[i].name_buffer, n);
-#endif
+	if (android_power_debug_mask & ANDROID_POWER_DEBUG_USER_WAKE_LOCK)
+		printk(KERN_INFO "release_wake_lock_store: %s, size %d\n",
+			g_user_wake_locks[i].name_buffer, n);
 
 	android_unlock_suspend(&g_user_wake_locks[i].suspend_lock);
 	return n;
@@ -1132,8 +1197,6 @@ static int __init android_power_init(void)
 	int ret;
 	int i;
 
-	printk("android_power_init\n");
-
 #if 0
 	if(pm_ops == NULL) {
 		printk("android_power_init no pm_ops, installing test code\n");
@@ -1208,8 +1271,6 @@ static int __init android_power_init(void)
 
 	g_android_power_sysclass = &android_power_sysclass;
 #endif
-	printk("android_power_init done\n");
-
 	return 0;
 
 //err2:
