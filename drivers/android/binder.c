@@ -187,7 +187,9 @@ struct binder_node {
 	void __user *ptr;
 	void __user *cookie;
 	unsigned has_strong_ref : 1;
+	unsigned pending_strong_ref : 1;
 	unsigned has_weak_ref : 1;
+	unsigned pending_weak_ref : 1;
 	unsigned has_async_transaction : 1;
 	unsigned accept_fds : 1;
 	int min_priority : 8;
@@ -1778,6 +1780,27 @@ binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
 					node_ptr);
 				break;
 			}
+			if (cmd == BC_ACQUIRE_DONE) {
+				if (node->pending_strong_ref == 0) {
+					binder_user_error("binder: %d:%d "
+						"BC_ACQUIRE_DONE node %d has "
+						"no pending acquire request\n",
+						proc->pid, thread->pid,
+						node->debug_id);
+					break;
+				}
+				node->pending_strong_ref = 0;
+			} else {
+				if (node->pending_weak_ref == 0) {
+					binder_user_error("binder: %d:%d "
+						"BC_INCREFS_DONE node %d has "
+						"no pending increfs request\n",
+						proc->pid, thread->pid,
+						node->debug_id);
+					break;
+				}
+				node->pending_weak_ref = 0;
+			}
 			binder_dec_node(node, cmd == BC_ACQUIRE_DONE, 0);
 			if (binder_debug_mask & BINDER_DEBUG_USER_REFS)
 				printk(KERN_INFO "binder: %d:%d %s node %d ls %d lw %d\n",
@@ -2164,11 +2187,13 @@ retry:
 				cmd = BR_INCREFS;
 				cmd_name = "BR_INCREFS";
 				node->has_weak_ref = 1;
+				node->pending_weak_ref = 1;
 				node->local_weak_refs++;
 			} else if (strong && !node->has_strong_ref) {
 				cmd = BR_ACQUIRE;
 				cmd_name = "BR_ACQUIRE";
 				node->has_strong_ref = 1;
+				node->pending_strong_ref = 1;
 				node->local_strong_refs++;
 			} else if (!strong && node->has_strong_ref) {
 				cmd = BR_RELEASE;
