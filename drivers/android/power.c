@@ -118,7 +118,8 @@ android_suspend_lock_t *android_allocate_suspend_lock(const char *debug_name)
 }
 #endif
 
-int android_init_suspend_lock(android_suspend_lock_t *lock)
+static int android_init_suspend_lock_internal(
+	android_suspend_lock_t *lock, int has_spin_lock)
 {
 	unsigned long irqflags;
 
@@ -142,13 +143,20 @@ int android_init_suspend_lock(android_suspend_lock_t *lock)
 	lock->flags = 0;
 
 	INIT_LIST_HEAD(&lock->link);
-	spin_lock_irqsave(&g_list_lock, irqflags);
+	if (!has_spin_lock)
+		spin_lock_irqsave(&g_list_lock, irqflags);
 	list_add(&lock->link, &g_inactive_locks);
-	spin_unlock_irqrestore(&g_list_lock, irqflags);	
+	if (!has_spin_lock)
+		spin_unlock_irqrestore(&g_list_lock, irqflags);	
 //	if(lock->flags & ANDROID_SUSPEND_LOCK_FLAG_USER_VISIBLE_MASK) {
 //		sysfs_create_file(struct kobject * k, const struct attribute * a)
 //	}
 	return 0;
+}
+
+int android_init_suspend_lock(android_suspend_lock_t *lock)
+{
+	return android_init_suspend_lock_internal(lock, 0);
 }
 
 void android_uninit_suspend_lock(android_suspend_lock_t *lock)
@@ -162,7 +170,8 @@ void android_uninit_suspend_lock(android_suspend_lock_t *lock)
 	if(lock->stat.count) {
 		if(g_deleted_wake_locks.stat.count == 0) {
 			g_deleted_wake_locks.name = "deleted_wake_locks";
-			android_init_suspend_lock(&g_deleted_wake_locks);
+			android_init_suspend_lock_internal(
+				&g_deleted_wake_locks, 1);
 		}
 		g_deleted_wake_locks.stat.count += lock->stat.count;
 		g_deleted_wake_locks.stat.expire_count += lock->stat.expire_count;
