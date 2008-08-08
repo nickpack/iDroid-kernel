@@ -4248,7 +4248,7 @@ static void yaffs_ObjectToCheckpointObject(yaffs_CheckpointObject *cp,
 		cp->fileSizeOrEquivalentObjectId = obj->variant.hardLinkVariant.equivalentObjectId;
 }
 
-static void yaffs_CheckpointObjectToObject( yaffs_Object *obj,yaffs_CheckpointObject *cp)
+static int yaffs_CheckpointObjectToObject( yaffs_Object *obj,yaffs_CheckpointObject *cp)
 {
 
 	yaffs_Object *parent;
@@ -4263,8 +4263,14 @@ static void yaffs_CheckpointObjectToObject( yaffs_Object *obj,yaffs_CheckpointOb
 	else
 		parent = NULL;
 		
-	if(parent)
+	if(parent) {
+		if (parent->variantType != YAFFS_OBJECT_TYPE_DIRECTORY) {
+			T(YAFFS_TRACE_ALWAYS,(TSTR("Checkpoint read object %d parent %d type %d chunk %d Parent type, %d, not directory"TENDSTR),
+				cp->objectId,cp->parentId,cp->variantType,cp->hdrChunk,parent->variantType));
+			return 0;
+		}
 		yaffs_AddObjectToDirectory(parent, obj);
+	}
 
 	obj->hdrChunk = cp->hdrChunk;
 	obj->variantType = cp->variantType;
@@ -4284,6 +4290,7 @@ static void yaffs_CheckpointObjectToObject( yaffs_Object *obj,yaffs_CheckpointOb
 
 	if(obj->hdrChunk > 0)
 		obj->lazyLoaded = 1;
+	return 1;
 }
 
 
@@ -4459,7 +4466,9 @@ static int yaffs_ReadCheckpointObjects(yaffs_Device *dev)
 		else if(ok){
 			obj = yaffs_FindOrCreateObjectByNumber(dev,cp.objectId, cp.variantType);
 			if(obj) {
-				yaffs_CheckpointObjectToObject(obj,&cp);
+				ok = yaffs_CheckpointObjectToObject(obj,&cp);
+				if (!ok)
+					break;
 				if(obj->variantType == YAFFS_OBJECT_TYPE_FILE) {
                                         ok = yaffs_ReadCheckpointTnodes(obj);
                                 } else if(obj->variantType == YAFFS_OBJECT_TYPE_HARDLINK) {
