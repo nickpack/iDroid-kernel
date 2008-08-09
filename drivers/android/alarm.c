@@ -82,6 +82,7 @@ static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int rv = 0;
 	unsigned long flags;
+	int i;
 	struct timespec new_alarm_time;
 	struct timespec new_rtc_time;
 	struct timespec tmp_time;
@@ -112,7 +113,7 @@ static long alarm_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		case ANDROID_ALARM_CLEAR(0):
 			spin_lock_irqsave(&alarm_slock, flags);
 			ANDROID_ALARM_DPRINTF(ANDROID_ALARM_PRINT_IO, "alarm %d clear\n", alarm_type);
-			hrtimer_cancel(&alarm_timer[alarm_type]);
+			hrtimer_try_to_cancel(&alarm_timer[alarm_type]);
 			if(alarm_pending) {
 				alarm_pending &= ~alarm_type_mask;
 				if(!alarm_pending && !wait_pending) {
@@ -184,13 +185,15 @@ from_old_alarm_set:
 
 			mutex_lock(&alarm_setrtc_mutex);
 			spin_lock_irqsave(&alarm_slock, flags);
+			for (i = 0; i < ANDROID_ALARM_SYSTEMTIME; i++)
+				hrtimer_try_to_cancel(&alarm_timer[i]);
 			getnstimeofday(&tmp_time);
 			elapsed_rtc_delta = timespec_sub(elapsed_rtc_delta, timespec_sub(tmp_time, new_rtc_time));
+			spin_unlock_irqrestore(&alarm_slock, flags);
 			rv = do_settimeofday(&new_rtc_time);
-			if(rv >= 0) {
-				alarm_start_hrtimer(ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP); // restart with new offset
-				alarm_start_hrtimer(ANDROID_ALARM_ELAPSED_REALTIME);
-			}
+			spin_lock_irqsave(&alarm_slock, flags);
+			for (i = 0; i < ANDROID_ALARM_SYSTEMTIME; i++)
+				alarm_start_hrtimer(i);
 			spin_unlock_irqrestore(&alarm_slock, flags);
 			if(rv < 0) {
 				ANDROID_ALARM_DPRINTF(ANDROID_ALARM_PRINT_ERRORS, "Failed to set time\n");
@@ -209,6 +212,7 @@ from_old_alarm_set:
 			}
 			break;
 		case ANDROID_ALARM_GET_TIME(0):
+			mutex_lock(&alarm_setrtc_mutex);
 			spin_lock_irqsave(&alarm_slock, flags);
 			if(alarm_type != ANDROID_ALARM_SYSTEMTIME) {
 				getnstimeofday(&tmp_time);
@@ -219,6 +223,7 @@ from_old_alarm_set:
 			else
 				ktime_get_ts(&tmp_time);
 			spin_unlock_irqrestore(&alarm_slock, flags);
+			mutex_unlock(&alarm_setrtc_mutex);
 			if(copy_to_user((void __user *)arg, &tmp_time, sizeof(tmp_time))) {
 				rv = -EFAULT;
 				goto err1;
@@ -250,9 +255,11 @@ static int alarm_release(struct inode *inode, struct file *file)
 			uint32_t alarm_type_mask = 1U << i;
 			if(alarm_enabled & alarm_type_mask) {
 				ANDROID_ALARM_DPRINTF(ANDROID_ALARM_PRINT_INFO, "alarm_release: clear alarm, pending %d\n", !!(alarm_pending & alarm_type_mask));
-				hrtimer_cancel(&alarm_timer[i]);
 				alarm_enabled &= ~alarm_type_mask;
 			}
+			spin_unlock_irqrestore(&alarm_slock, flags);
+			hrtimer_cancel(&alarm_timer[i]);
+			spin_lock_irqsave(&alarm_slock, flags);
 		}
 		if(alarm_pending | wait_pending) {
 			if(alarm_pending)
@@ -276,10 +283,12 @@ static enum hrtimer_restart alarm_timer_triggered(struct hrtimer *timer)
 
 	ANDROID_ALARM_DPRINTF(ANDROID_ALARM_PRINT_INT, "alarm_timer_triggered type %d\n", alarm_type);
 	spin_lock_irqsave(&alarm_slock, flags);
-	android_lock_suspend_auto_expire(&alarm_suspend_lock, 5 * HZ);
-	alarm_enabled &= ~alarm_type_mask;
-	alarm_pending |= alarm_type_mask;
-	wake_up(&alarm_wait_queue);
+	if (alarm_enabled & alarm_type_mask) {
+		android_lock_suspend_auto_expire(&alarm_suspend_lock, 5 * HZ);
+		alarm_enabled &= ~alarm_type_mask;
+		alarm_pending |= alarm_type_mask;
+		wake_up(&alarm_wait_queue);
+	}
 	spin_unlock_irqrestore(&alarm_slock, flags);
 	return HRTIMER_NORESTART;
 }
@@ -315,11 +324,11 @@ int alarm_suspend(struct platform_device *pdev, pm_message_t state)
 		goto err1;
 	}
 	if(alarm_enabled & (ANDROID_ALARM_RTC_WAKEUP_MASK | ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP_MASK)) {
+		spin_unlock_irqrestore(&alarm_slock, flags);
 		if(alarm_enabled & ANDROID_ALARM_RTC_WAKEUP_MASK)
 			hrtimer_cancel(&alarm_timer[ANDROID_ALARM_RTC_WAKEUP]);
 		if(alarm_enabled & ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP_MASK)
 			hrtimer_cancel(&alarm_timer[ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP]);
-		spin_unlock_irqrestore(&alarm_slock, flags);
 
 		rtc_read_time(alarm_rtc_dev, &rtc_current_rtc_time);
 		rtc_current_timespec.tv_nsec = 0;
