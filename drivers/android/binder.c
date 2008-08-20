@@ -1452,6 +1452,14 @@ binder_transaction(struct binder_proc *proc, struct binder_thread *thread,
 				node->min_priority = fp->flags & FLAT_BINDER_FLAG_PRIORITY_MASK;
 				node->accept_fds = !!(fp->flags & FLAT_BINDER_FLAG_ACCEPTS_FDS);
 			}
+			if (fp->cookie != node->cookie) {
+				binder_user_error("binder: %d:%d sending u%p "
+					"node %d, cookie mismatch %p != %p\n",
+					proc->pid, thread->pid,
+					fp->binder, node->debug_id,
+					fp->cookie, node->cookie);
+				goto err_binder_get_ref_for_node_failed;
+			}
 			ref = binder_get_ref_for_node(target_proc, node);
 			if (ref == NULL) {
 				return_error = BR_FAILED_REPLY;
@@ -1778,6 +1786,16 @@ binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
 					"BC_INCREFS_DONE" :
 					"BC_ACQUIRE_DONE",
 					node_ptr);
+				break;
+			}
+			if (cookie != node->cookie) {
+				binder_user_error("binder: %d:%d %s u%p node %d"
+					" cookie mismatch %p != %p\n",
+					proc->pid, thread->pid,
+					cmd == BC_INCREFS_DONE ?
+					"BC_INCREFS_DONE" : "BC_ACQUIRE_DONE",
+					node_ptr, node->debug_id,
+					cookie, node->cookie);
 				break;
 			}
 			if (cmd == BC_ACQUIRE_DONE) {
