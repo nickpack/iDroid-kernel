@@ -973,12 +973,18 @@ static ssize_t oom_adjust_write(struct file *file, const char __user *buf,
 
 static int oom_adjust_permission(struct inode *inode, int mask,
 					struct nameidata *nd) {
+	uid_t uid;
 	struct task_struct *p = get_proc_task(inode);
+	if(p) {
+		uid = p->uid;
+		put_task_struct(p);
+	}
+
 	/*
 	 * System Server (uid == 1000) is granted access to oom_adj of all 
 	 * android applications (uid > 10000) as and services (uid >= 1000)
 	 */
-	if (p && (current->fsuid == 1000) && (p->uid >= 1000)) {
+	if (p && (current->fsuid == 1000) && (uid >= 1000)) {
 		if (inode->i_mode >> 6 & mask) {
 			return 0;
 		}
