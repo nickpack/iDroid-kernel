@@ -1996,7 +1996,7 @@ binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
 						list_add_tail(&ref->death->work.entry, &thread->todo);
 					} else {
 						list_add_tail(&ref->death->work.entry, &proc->todo);
-						wake_up_interruptible(&ref->proc->wait);
+						wake_up_interruptible(&proc->wait);
 					}
 				}
 			} else {
@@ -2022,7 +2022,12 @@ binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
 				ref->death = NULL;
 				if (list_empty(&death->work.entry)) {
 					death->work.type = BINDER_WORK_CLEAR_DEATH_NOTIFICATION;
-					list_add_tail(&death->work.entry, &thread->todo);
+					if (thread->looper & (BINDER_LOOPER_STATE_REGISTERED | BINDER_LOOPER_STATE_ENTERED)) {
+						list_add_tail(&death->work.entry, &thread->todo);
+					} else {
+						list_add_tail(&death->work.entry, &proc->todo);
+						wake_up_interruptible(&proc->wait);
+					}
 				} else {
 					BUG_ON(death->work.type != BINDER_WORK_DEAD_BINDER);
 					death->work.type = BINDER_WORK_DEAD_BINDER_AND_CLEAR;
@@ -2057,7 +2062,12 @@ binder_thread_write(struct binder_proc *proc, struct binder_thread *thread,
 			list_del_init(&death->work.entry);
 			if (death->work.type == BINDER_WORK_DEAD_BINDER_AND_CLEAR) {
 				death->work.type = BINDER_WORK_CLEAR_DEATH_NOTIFICATION;
-				list_add_tail(&death->work.entry, &thread->todo);
+				if (thread->looper & (BINDER_LOOPER_STATE_REGISTERED | BINDER_LOOPER_STATE_ENTERED)) {
+					list_add_tail(&death->work.entry, &thread->todo);
+				} else {
+					list_add_tail(&death->work.entry, &proc->todo);
+					wake_up_interruptible(&proc->wait);
+				}
 			}
 		} break;
 
