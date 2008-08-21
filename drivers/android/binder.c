@@ -944,8 +944,10 @@ binder_inc_node(struct binder_node *node, int strong, int internal,
 			node->internal_strong_refs++;
 		} else
 			node->local_strong_refs++;
-		if (!node->has_strong_ref && list_empty(&node->work.entry))
+		if (!node->has_strong_ref && target_list) {
+			list_del_init(&node->work.entry);
 			list_add_tail(&node->work.entry, target_list);
+		}
 	} else {
 		if (!internal)
 			node->local_weak_refs++;
@@ -983,9 +985,9 @@ binder_dec_node(struct binder_node *node, int strong, int internal)
 			wake_up_interruptible(&node->proc->wait);
 		}
 	} else {
-		list_del_init(&node->work.entry);
 		if (hlist_empty(&node->refs) && !node->local_strong_refs &&
 		    !node->local_weak_refs) {
+			list_del_init(&node->work.entry);
 			if (node->proc) {
 				rb_erase(&node->rb_node, &node->proc->nodes);
 				if (binder_debug_mask & BINDER_DEBUG_INTERNAL_REFS)
