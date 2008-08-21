@@ -889,7 +889,7 @@ binder_get_node(struct binder_proc *proc, void __user *ptr)
 }
 
 static struct binder_node *
-binder_new_node(struct binder_proc *proc, void __user *ptr)
+binder_new_node(struct binder_proc *proc, void __user *ptr, void __user *cookie)
 {
 	struct rb_node **p = &proc->nodes.rb_node;
 	struct rb_node *parent = NULL;
@@ -916,9 +916,14 @@ binder_new_node(struct binder_proc *proc, void __user *ptr)
 	node->debug_id = ++binder_last_id;
 	node->proc = proc;
 	node->ptr = ptr;
+	node->cookie = cookie;
 	node->work.type = BINDER_WORK_NODE;
 	INIT_LIST_HEAD(&node->work.entry);
 	INIT_LIST_HEAD(&node->async_todo);
+	if (binder_debug_mask & BINDER_DEBUG_INTERNAL_REFS)
+		printk(KERN_INFO "binder: %d:%d node %d u%p c%p created\n",
+		       proc->pid, current->pid, node->debug_id,
+		       node->ptr, node->cookie);
 	return node;
 }
 
@@ -1443,12 +1448,11 @@ binder_transaction(struct binder_proc *proc, struct binder_thread *thread,
 			struct binder_ref *ref;
 			struct binder_node *node = binder_get_node(proc, fp->binder);
 			if (node == NULL) {
-				node = binder_new_node(proc, fp->binder);
+				node = binder_new_node(proc, fp->binder, fp->cookie);
 				if (node == NULL) {
 					return_error = BR_FAILED_REPLY;
 					goto err_binder_new_node_failed;
 				}
-				node->cookie = fp->cookie;
 				node->min_priority = fp->flags & FLAT_BINDER_FLAG_PRIORITY_MASK;
 				node->accept_fds = !!(fp->flags & FLAT_BINDER_FLAG_ACCEPTS_FDS);
 			}
@@ -2583,7 +2587,7 @@ static long binder_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			}
 		} else
 			binder_context_mgr_uid = current->euid;
-		binder_context_mgr_node = binder_new_node(proc, NULL);
+		binder_context_mgr_node = binder_new_node(proc, NULL, NULL);
 		if (binder_context_mgr_node == NULL) {
 			ret = -ENOMEM;
 			goto err;
