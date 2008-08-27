@@ -17,6 +17,7 @@
 */
 
 #include <linux/module.h>
+#include <linux/file.h>
 #include <linux/fs.h>
 #include <linux/miscdevice.h>
 #include <linux/security.h>
@@ -198,6 +199,8 @@ static int ashmem_release(struct inode *ignored, struct file *file)
 		range_del(range);
 	mutex_unlock(&ashmem_mutex);
 
+	if (asma->file)
+		fput(asma->file);
 	kmem_cache_free(ashmem_area_cachep, asma);
 
 	return 0;
@@ -236,8 +239,8 @@ static int ashmem_mmap(struct file *file, struct vm_area_struct *vma)
 			goto out;
 		}
 		asma->file = vmfile;
-	} else
-		get_file(asma->file);
+	}
+	get_file(asma->file);
 
 	shmem_set_file(vma, asma->file);
 	vma->vm_flags |= VM_CAN_NONLINEAR;
