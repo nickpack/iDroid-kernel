@@ -1035,7 +1035,30 @@ static void yaffs_RetireBlock(yaffs_Device * dev, int blockInNAND)
 
 	yaffs_InvalidateCheckpoint(dev);
 	
-	yaffs_MarkBlockBad(dev, blockInNAND);
+	if (yaffs_MarkBlockBad(dev, blockInNAND) != YAFFS_OK) {
+		if (yaffs_EraseBlockInNAND(dev, blockInNAND) != YAFFS_OK) {
+			T(YAFFS_TRACE_ALWAYS, (TSTR(
+				"yaffs: Failed to mark bad and erase block %d"
+				TENDSTR), blockInNAND));
+		}
+		else {
+			yaffs_ExtendedTags tags;
+			int chunkId = blockInNAND * dev->nChunksPerBlock;
+
+			__u8 *buffer = yaffs_GetTempBuffer(dev, __LINE__);
+
+			memset(buffer, 0xff, dev->nDataBytesPerChunk);
+			yaffs_InitialiseTags(&tags);
+			tags.sequenceNumber = YAFFS_SEQUENCE_BAD_BLOCK;
+			if (dev->writeChunkWithTagsToNAND(dev, chunkId -
+			    dev->chunkOffset, buffer, &tags) != YAFFS_OK)
+				T(YAFFS_TRACE_ALWAYS, (TSTR("yaffs: Failed to "
+					"write bad block marker to block %d"
+					TENDSTR), blockInNAND));
+
+			yaffs_ReleaseTempBuffer(dev, buffer, __LINE__);
+		}
+	}
 
 	bi->blockState = YAFFS_BLOCK_STATE_DEAD;
 	bi->gcPrioritise = 0;
@@ -5517,6 +5540,9 @@ static int yaffs_Scan(yaffs_Device * dev)
 		bi->blockState = state;
 		bi->sequenceNumber = sequenceNumber;
 
+		if(bi->sequenceNumber == YAFFS_SEQUENCE_BAD_BLOCK)
+			bi->blockState = state = YAFFS_BLOCK_STATE_DEAD;
+
 		T(YAFFS_TRACE_SCAN_DEBUG,
 		  (TSTR("Block scanning block %d state %d seq %d" TENDSTR), blk,
 		   state, sequenceNumber));
@@ -6077,6 +6103,8 @@ static int yaffs_ScanBackwards(yaffs_Device * dev)
 
 		if(bi->sequenceNumber == YAFFS_SEQUENCE_CHECKPOINT_DATA)
 			bi->blockState = state = YAFFS_BLOCK_STATE_CHECKPOINT;
+		if(bi->sequenceNumber == YAFFS_SEQUENCE_BAD_BLOCK)
+			bi->blockState = state = YAFFS_BLOCK_STATE_DEAD;
 			
 		T(YAFFS_TRACE_SCAN_DEBUG,
 		  (TSTR("Block scanning block %d state %d seq %d" TENDSTR), blk,
