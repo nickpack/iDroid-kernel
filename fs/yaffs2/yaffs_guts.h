@@ -108,6 +108,9 @@
 #define YAFFS_LOWEST_SEQUENCE_NUMBER	0x00001000
 #define YAFFS_HIGHEST_SEQUENCE_NUMBER	0xEFFFFF00
 
+/* Special sequence number for bad block that failed to be marked bad */
+#define YAFFS_SEQUENCE_BAD_BLOCK	0xFFFF0000
+
 /* ChunkCache is used for short read/write operations.*/
 typedef struct {
 	struct yaffs_ObjectStruct *object;
