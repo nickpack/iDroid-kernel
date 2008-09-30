@@ -58,6 +58,10 @@ config BT_HCIUART
 	  Say Y here to compile support for Bluetooth UART devices into the
 	  kernel or say M to compile it as module (hci_uart).
 
+config BT_HCIUART_DEBUG
+	boolean "HCI UART Debug"
+	depends on BT_HCIUART
+
 config BT_HCIUART_H4
 	bool "UART (H4) protocol support"
 	depends on BT_HCIUART

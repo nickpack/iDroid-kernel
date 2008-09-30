@@ -41,6 +41,22 @@ config BT_L2CAP
 	  Say Y here to compile L2CAP support into the kernel or say M to
 	  compile it as module (l2cap).
 
+config BT_L2CAP_DEBUG
+	boolean "Debug L2CAP sockets"
+	depends on BT_L2CAP
+
+config BT_SOCK_DEBUG
+	boolean "Debug Bluetooth sockets"
+	depends on BT
+
+config BT_HCI_CORE_DEBUG
+	boolean "Debug HCI socket core"
+	depends on BT
+
+config BT_HCI_SOCK_DEBUG
+	boolean "Debug HCI sockets"
+	depends on BT
+
 config BT_SCO
 	tristate "SCO links support"
 	depends on BT
@@ -50,6 +66,10 @@ config BT_SCO
 
 	  Say Y here to compile SCO support into the kernel or say M to
 	  compile it as module (sco).
+
+config BT_SCO_DEBUG
+	boolean "Enable SCO Debug"
+	depends on BT
 
 source "net/bluetooth/rfcomm/Kconfig"
 
