@@ -484,6 +484,10 @@ config LOW_MEMORY_KILLER
 	---help---
           Register processes to be killed when memory is low
 
+config LOGGER
+	bool "High-speed in-kernel logging driver"
+	default y
+
 config ANDROID_RAM_CONSOLE
         bool "RAM buffer console"
         default n
