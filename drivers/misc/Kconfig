@@ -475,4 +475,9 @@ config SGI_GRU_DEBUG
 	This option enables addition debugging code for the SGI GRU driver. If
 	you are unsure, say N.
 
+config LOW_MEMORY_KILLER
+	tristate "Low Memory Killer"
+	---help---
+          Register processes to be killed when memory is low
+
 endif # MISC_DEVICES
