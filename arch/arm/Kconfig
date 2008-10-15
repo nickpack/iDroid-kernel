@@ -203,6 +203,13 @@ config ARCH_AAEC2000
 	help
 	  This enables support for systems based on the Agilent AAEC-2000
 
+config ARCH_GOLDFISH
+	bool "Goldfish"
+	select GENERIC_TIME
+	select GENERIC_CLOCKEVENTS
+	help
+	  Support for Goldfish Virtual Platform.
+
 config ARCH_INTEGRATOR
 	bool "ARM Ltd. Integrator family"
 	select ARM_AMBA
@@ -541,6 +548,8 @@ config ARCH_MSM7X00A
 	  <http://www.cdmatech.com/products/msm7200_chipset_solution.jsp>
 
 endchoice
+
+source "arch/arm/mach-goldfish/Kconfig"
 
 source "arch/arm/mach-clps711x/Kconfig"
 
