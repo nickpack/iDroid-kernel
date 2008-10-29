@@ -30,6 +30,8 @@ g_file_storage-objs		:= file_storage.o usbstring.o config.o \
 					epautoconf.o
 g_printer-objs			:= printer.o usbstring.o config.o \
 					epautoconf.o
+g_android_adb-objs			:= android_adb.o usbstring.o config.o \
+					epautoconf.o
 
 ifeq ($(CONFIG_USB_ETH_RNDIS),y)
 	g_ether-objs		+= rndis.o
@@ -42,4 +44,5 @@ obj-$(CONFIG_USB_FILE_STORAGE)	+= g_file_storage.o
 obj-$(CONFIG_USB_G_SERIAL)	+= g_serial.o
 obj-$(CONFIG_USB_G_PRINTER)	+= g_printer.o
 obj-$(CONFIG_USB_MIDI_GADGET)	+= g_midi.o
+obj-$(CONFIG_USB_ANDROID_ADB_GADGET)	+= g_android_adb.o
 

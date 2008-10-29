@@ -564,6 +564,15 @@ config USB_G_PRINTER
 	  For more information, see Documentation/usb/gadget_printer.txt
 	  which includes sample code for accessing the device file.
 
+config USB_ANDROID_ADB_GADGET
+	tristate "Android ADB Gadget"
+	help
+	  The Android ADB gadget provides device side support for the
+	  Android ADB debugging tool.
+
+	  Say "y" to link the driver statically, or "m" to build a
+	  dynamically linked module called "g_android_adb".
+
 # put drivers that need isochronous transfer support (for audio
 # or video class gadget drivers), or specific hardware, here.
 
