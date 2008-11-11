@@ -86,8 +86,7 @@ static __inline__ struct ipv6_pinfo *inet6_sk_generic(struct sock *sk)
 #ifdef CONFIG_ANDROID_PARANOID_NETWORK
 static inline int current_has_network(void)
 {
-	return (!current->uid || current->gid == AID_INET ||
-		groups_search(current->group_info, AID_INET));
+	return (!current->euid || in_egroup_p(AID_INET));
 }
 # else
 static inline int current_has_network(void)
