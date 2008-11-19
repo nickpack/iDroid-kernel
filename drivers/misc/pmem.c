@@ -652,8 +652,8 @@ static int pmem_mmap(struct file *file, struct vm_area_struct *vma)
 			}
 		}
 		data->flags |= PMEM_FLAGS_SUBMAP;
-		get_task_struct(current);
-		data->task = current;
+		get_task_struct(current->group_leader);
+		data->task = current->group_leader;
 		data->vma = vma;
 #if PMEM_DEBUG
 		data->pid = current->pid;
