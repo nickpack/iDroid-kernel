@@ -264,16 +264,12 @@ static inline int inet_netns_ok(struct net *net, int protocol)
 #ifdef CONFIG_ANDROID_PARANOID_NETWORK
 static inline int current_has_network(void)
 {
-	return (!current->euid ||
-		current->egid == AID_INET ||
-		current->egid == AID_NET_RAW ||
-		groups_search(current->group_info, AID_INET) ||
-		groups_search(current->group_info, AID_NET_RAW));
+	return (!current->euid || in_egroup_p(AID_INET) ||
+		in_egroup_p(AID_NET_RAW));
 }
 static inline int current_has_cap(int cap)
 {
-	if (cap == CAP_NET_RAW && (current->egid == AID_NET_RAW ||
-	    groups_search(current->group_info, AID_NET_RAW)))
+	if (cap == CAP_NET_RAW && in_egroup_p(AID_NET_RAW))
 		return 1;
 	return capable(cap);
 }

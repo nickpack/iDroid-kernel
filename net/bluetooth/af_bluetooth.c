@@ -142,14 +142,12 @@ static void bt_reclassify_sock_lock(struct socket *sock, int proto)
 #ifdef CONFIG_ANDROID_PARANOID_NETWORK
 static inline int current_has_bt_admin(void)
 {
-	return (!current->euid || current->egid == AID_NET_BT_ADMIN ||
-		groups_search(current->group_info, AID_NET_BT_ADMIN));
+	return (!current->euid || in_egroup_p(AID_NET_BT_ADMIN));
 }
 
 static inline int current_has_bt(void)
 {
-	return (current_has_bt_admin() || current->egid == AID_NET_BT ||
-		groups_search(current->group_info, AID_NET_BT));
+	return (current_has_bt_admin() || in_egroup_p(AID_NET_BT));
 }
 # else
 static inline int current_has_bt_admin(void)
