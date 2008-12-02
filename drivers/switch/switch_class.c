@@ -96,6 +96,7 @@ void switch_set_state(struct switch_dev *sdev, int state)
 		}
 	}
 }
+EXPORT_SYMBOL_GPL(switch_set_state);
 
 static int create_switch_class(void)
 {
