@@ -28,7 +28,7 @@ enum {
 	DEBUG_EXIT_SUSPEND = 1U << 0,
 	DEBUG_WAKEUP = 1U << 1,
 	DEBUG_SUSPEND = 1U << 2,
-	DEBUG_WAIT = 1U << 3,
+	DEBUG_EXPIRE = 1U << 3,
 	DEBUG_WAKE_LOCK = 1U << 4,
 };
 static int debug_mask = DEBUG_EXIT_SUSPEND | DEBUG_WAKEUP;
@@ -44,7 +44,6 @@ static DEFINE_SPINLOCK(list_lock);
 static LIST_HEAD(inactive_locks);
 static struct list_head active_wake_locks[WAKE_LOCK_TYPE_COUNT];
 static int current_event_num;
-static wait_queue_head_t expire_wait_queue;
 struct workqueue_struct *suspend_work_queue;
 struct wake_lock main_wake_lock;
 suspend_state_t requested_suspend_state = PM_SUSPEND_MEM;
@@ -213,7 +212,7 @@ static void expire_wake_lock(struct wake_lock *lock)
 	lock->flags &= ~(WAKE_LOCK_ACTIVE | WAKE_LOCK_AUTO_EXPIRE);
 	list_del(&lock->link);
 	list_add(&lock->link, &inactive_locks);
-	if (debug_mask & DEBUG_WAKE_LOCK)
+	if (debug_mask & (DEBUG_WAKE_LOCK | DEBUG_EXPIRE))
 		pr_info("expired wake lock %s\n", lock->name);
 }
 
@@ -267,22 +266,6 @@ long has_wake_lock(int type)
 	return ret;
 }
 
-static void expire_wake_locks(struct work_struct *work)
-{
-	long wait;
-	if (debug_mask & DEBUG_SUSPEND)
-		print_active_locks(WAKE_LOCK_SUSPEND);
-	wait = has_wake_lock(WAKE_LOCK_SUSPEND);
-	if (debug_mask & DEBUG_WAIT)
-		pr_info("expire_wake_locks: wait %ld\n", wait);
-	if (wait > 0)
-		wait_event_interruptible_timeout(expire_wait_queue,
-			has_wake_lock(WAKE_LOCK_SUSPEND) != wait, wait);
-	if (debug_mask & DEBUG_WAIT)
-		pr_info("expire_wake_locks: exit wait\n");
-}
-static DECLARE_WORK(expire_work, expire_wake_locks);
-
 static void suspend(struct work_struct *work)
 {
 	int ret;
@@ -316,6 +299,24 @@ static void suspend(struct work_struct *work)
 	}
 }
 static DECLARE_WORK(suspend_work, suspend);
+
+static void expire_wake_locks(unsigned long data)
+{
+	long has_lock;
+	unsigned long irqflags;
+	if (debug_mask & DEBUG_EXPIRE)
+		pr_info("expire_wake_locks: start\n");
+	if (debug_mask & DEBUG_SUSPEND)
+		print_active_locks(WAKE_LOCK_SUSPEND);
+	spin_lock_irqsave(&list_lock, irqflags);
+	has_lock = has_wake_lock_locked(WAKE_LOCK_SUSPEND);
+	if (debug_mask & DEBUG_EXPIRE)
+		pr_info("expire_wake_locks: done, has_lock %ld\n", has_lock);
+	if (has_lock == 0)
+		queue_work(suspend_work_queue, &suspend_work);
+	spin_unlock_irqrestore(&list_lock, irqflags);
+}
+static DEFINE_TIMER(expire_timer, expire_wake_locks, 0, 0);
 
 static int power_suspend_late(struct platform_device *pdev, pm_message_t state)
 {
@@ -396,6 +397,7 @@ static void wake_lock_internal(
 {
 	int type;
 	unsigned long irqflags;
+	long expire_in;
 
 	spin_lock_irqsave(&list_lock, irqflags);
 	type = lock->flags & WAKE_LOCK_TYPE_MASK;
@@ -444,9 +446,23 @@ static void wake_lock_internal(
 		else if (!wake_lock_active(&main_wake_lock))
 			update_sleep_wait_stats_locked(0);
 #endif
-		wake_up(&expire_wait_queue);
-		if (has_timeout && has_wake_lock_locked(type) > 0)
-			queue_work(suspend_work_queue, &expire_work);
+		if (has_timeout)
+			expire_in = has_wake_lock_locked(type);
+		else
+			expire_in = -1;
+		if (expire_in > 0) {
+			if (debug_mask & DEBUG_EXPIRE)
+				pr_info("wake_lock: %s, start expire timer, "
+					"%ld\n", lock->name, expire_in);
+			mod_timer(&expire_timer, jiffies + expire_in);
+		} else {
+			if (del_timer(&expire_timer))
+				if (debug_mask & DEBUG_EXPIRE)
+					pr_info("wake_lock: %s, stop expire timer\n",
+						lock->name);
+			if (expire_in == 0)
+				queue_work(suspend_work_queue, &suspend_work);
+		}
 	}
 	spin_unlock_irqrestore(&list_lock, irqflags);
 }
@@ -479,15 +495,26 @@ void wake_unlock(struct wake_lock *lock)
 	list_add(&lock->link, &inactive_locks);
 	if (type == WAKE_LOCK_SUSPEND) {
 		long has_lock = has_wake_lock_locked(type);
-		wake_up(&expire_wait_queue);
-		if (has_lock > 0)
-			queue_work(suspend_work_queue, &expire_work);
-		else if (has_lock == 0)
-			queue_work(suspend_work_queue, &suspend_work);
+		if (has_lock > 0) {
+			if (debug_mask & DEBUG_EXPIRE)
+				pr_info("wake_unlock: %s, start expire timer, "
+					"%ld\n", lock->name, has_lock);
+			mod_timer(&expire_timer, jiffies + has_lock);
+		} else {
+			if (del_timer(&expire_timer))
+				if (debug_mask & DEBUG_EXPIRE)
+					pr_info("wake_unlock: %s, stop expire "
+						"timer\n", lock->name);
+			if (has_lock == 0)
+				queue_work(suspend_work_queue, &suspend_work);
+		}
+		if (lock == &main_wake_lock) {
+			if (debug_mask & DEBUG_SUSPEND)
+				print_active_locks(WAKE_LOCK_SUSPEND);
 #ifdef CONFIG_WAKELOCK_STAT
-		if (lock == &main_wake_lock)
 			update_sleep_wait_stats_locked(0);
 #endif
+		}
 	}
 	spin_unlock_irqrestore(&list_lock, irqflags);
 }
@@ -506,7 +533,6 @@ static int __init wakelocks_init(void)
 
 	for (i = 0; i < ARRAY_SIZE(active_wake_locks); i++)
 		INIT_LIST_HEAD(&active_wake_locks[i]);
-	init_waitqueue_head(&expire_wait_queue);
 
 #ifdef CONFIG_WAKELOCK_STAT
 	wake_lock_init(&deleted_wake_locks, WAKE_LOCK_SUSPEND,
