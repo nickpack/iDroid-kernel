@@ -210,6 +210,9 @@ static irqreturn_t gpio_keypad_irq_handler(int irq_in, void *dev_id)
 	struct gpio_event_matrix_info *mi = kp->keypad_info;
 	unsigned gpio_keypad_flags = mi->flags;
 
+	if (!kp->use_irq) /* ignore interrupt while registering the handler */
+		return IRQ_HANDLED;
+
 	for (i = 0; i < mi->ninputs; i++)
 		disable_irq(gpio_to_irq(mi->input_gpios[i]));
 	for (i = 0; i < mi->noutputs; i++) {
@@ -230,7 +233,6 @@ static int gpio_keypad_request_irqs(struct gpio_kp *kp)
 	int err;
 	unsigned int irq;
 	unsigned long request_flags;
-	unsigned long irq_flags;
 	struct gpio_event_matrix_info *mi = kp->keypad_info;
 
 	switch (mi->flags & (GPIOKPF_ACTIVE_HIGH|GPIOKPF_LEVEL_TRIGGERED_IRQ)) {
@@ -247,10 +249,6 @@ static int gpio_keypad_request_irqs(struct gpio_kp *kp)
 		request_flags = IRQF_TRIGGER_HIGH;
 		break;
 	}
-
-	/* request_irq does not have an option to request an irq in the
-	 * disabled state, so we disable interrupts while requesing our irqs */
-	local_irq_save(irq_flags);
 
 	for (i = 0; i < mi->ninputs; i++) {
 		err = irq = gpio_to_irq(mi->input_gpios[i]);
@@ -270,7 +268,6 @@ static int gpio_keypad_request_irqs(struct gpio_kp *kp)
 		}
 		disable_irq(irq);
 	}
-	local_irq_restore(irq_flags);
 	return 0;
 
 	for (i = mi->noutputs - 1; i >= 0; i--) {
@@ -279,7 +276,6 @@ err_request_irq_failed:
 err_gpio_get_irq_num_failed:
 		;
 	}
-	local_irq_restore(irq_flags);
 	return err;
 }
 
