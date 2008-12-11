@@ -72,7 +72,6 @@ static int gpio_switch_probe(struct platform_device *pdev)
 {
 	struct gpio_switch_platform_data *pdata = pdev->dev.platform_data;
 	struct gpio_switch_data *switch_data;
-	unsigned long irq_flags;
 	int ret = 0;
 
 	if (!pdata)
@@ -110,14 +109,10 @@ static int gpio_switch_probe(struct platform_device *pdev)
 		goto err_detect_irq_num_failed;
 	}
 
-	local_irq_save(irq_flags);
-
 	ret = request_irq(switch_data->irq, gpio_irq_handler,
 			  IRQF_TRIGGER_LOW, pdev->name, switch_data);
 	if (ret < 0)
 		goto err_request_irq;
-
-	local_irq_restore(irq_flags);
 
 	/* Perform initial detection */
 	gpio_switch_work(&switch_data->work);
@@ -125,7 +120,6 @@ static int gpio_switch_probe(struct platform_device *pdev)
 	return 0;
 
 err_request_irq:
-	local_irq_restore(irq_flags);
 err_detect_irq_num_failed:
 err_set_gpio_input:
 	gpio_free(switch_data->gpio);
