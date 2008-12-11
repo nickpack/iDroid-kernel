@@ -168,6 +168,7 @@ static int keyreset_probe(struct platform_device *pdev)
 	if (!state)
 		return -ENOMEM;
 
+	spin_lock_init(&state->lock);
 	keyp = pdata->keys_down;
 	while ((key = *keyp++)) {
 		if (key >= KEY_MAX)
