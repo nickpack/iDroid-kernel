@@ -504,6 +504,10 @@ config LOGGER
 	bool "High-speed in-kernel logging driver"
 	default y
 
+config UID_STAT
+	bool "UID based statistics tracking exported to /proc/uid_stat"
+	default n
+
 config ANDROID_RAM_CONSOLE
         bool "RAM buffer console"
         default n
