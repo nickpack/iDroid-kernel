@@ -5490,6 +5490,35 @@ struct yaffs_ShadowFixerStruct {
 	struct yaffs_ShadowFixerStruct *next;
 };
 
+
+static void yaffs_StripDeletedObjects(yaffs_Device *dev)
+{
+	/*
+	*  Sort out state of unlinked and deleted objects after scanning.
+	*/
+	struct ylist_head *i;
+	struct ylist_head *n;
+	yaffs_Object *l;
+
+	/* Soft delete all the unlinked files */
+	ylist_for_each_safe(i, n,
+		&dev->unlinkedDir->variant.directoryVariant.children) {
+		if (i) {
+			l = ylist_entry(i, yaffs_Object, siblings);
+			yaffs_DestroyObject(l);
+		}
+	}
+	
+	ylist_for_each_safe(i, n,
+		&dev->deletedDir->variant.directoryVariant.children) {
+		if (i) {
+			l = ylist_entry(i, yaffs_Object, siblings);
+			yaffs_DestroyObject(l);
+		}
+	}
+
+}
+
 static int yaffs_Scan(yaffs_Device * dev)
 {
 	yaffs_ExtendedTags tags;
@@ -5891,25 +5920,6 @@ static int yaffs_Scan(yaffs_Device * dev)
 
 	yaffs_HardlinkFixup(dev,hardList);
 	
-	/* Handle the unlinked files. Since they were left in an unlinked state we should
-         * just delete them.
-         */
-        {
-                struct ylist_head *i;
-                struct ylist_head *n;
-
-                yaffs_Object *l;
-                /* Soft delete all the unlinked files */
-                ylist_for_each_safe(i, n,
-                                   &dev->unlinkedDir->variant.directoryVariant.
-                                   children) {
-                        if (i) {
-                                l = ylist_entry(i, yaffs_Object, siblings);
-                                yaffs_DestroyObject(l);
-                        }
-                }
-	}
-
 	/* Fix up any shadowed objects */
 	{
 		struct yaffs_ShadowFixerStruct *fixer;
@@ -6657,37 +6667,6 @@ static int yaffs_ScanBackwards(yaffs_Device * dev)
 	 */
 	yaffs_HardlinkFixup(dev,hardList);
 	
-	
-	/*
-        *  Sort out state of unlinked and deleted objects.
-        */
-        {
-                struct ylist_head *i;
-                struct ylist_head *n;
-
-                yaffs_Object *l;
-
-                /* Soft delete all the unlinked files */
-                ylist_for_each_safe(i, n,
-                                   &dev->unlinkedDir->variant.directoryVariant.
-                                   children) {
-                        if (i) {
-                                l = ylist_entry(i, yaffs_Object, siblings);
-                                yaffs_DestroyObject(l);
-                        }
-                }
-
-                /* Soft delete all the deletedDir files */
-                ylist_for_each_safe(i, n,
-                                   &dev->deletedDir->variant.directoryVariant.
-                                   children) {
-                        if (i) {
-                                l = ylist_entry(i, yaffs_Object, siblings);
-                                yaffs_DestroyObject(l);
-
-                        }
-		}
-	}
 
 	yaffs_ReleaseTempBuffer(dev, chunkData, __LINE__);
 	
@@ -7391,6 +7370,8 @@ int yaffs_GutsInitialise(yaffs_Device * dev)
 		}else
 			if(!yaffs_Scan(dev))
 				init_failed = 1;
+
+		yaffs_StripDeletedObjects(dev);
 	}
 		
 	if(init_failed){
