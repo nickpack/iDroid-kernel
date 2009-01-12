@@ -17,9 +17,13 @@ config ANDROID_PMEM
 	bool "Android pmem allocator"
 	default y
 
-config ANDROID_TIMED_GPIO
+config TIMED_OUTPUT
+	bool "Timed output class driver"
+	default y
+
+config TIMED_GPIO
 	bool "Android timed gpio driver"
-	depends on GENERIC_GPIO
+	depends on GENERIC_GPIO && TIMED_OUTPUT
 	default y
 
 config ATMEL_PWM
