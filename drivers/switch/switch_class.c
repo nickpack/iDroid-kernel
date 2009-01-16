@@ -121,7 +121,7 @@ int switch_dev_register(struct switch_dev *sdev)
 	}
 
 	sdev->index = atomic_inc_return(&device_count);
-	sdev->dev = device_create_drvdata(switch_class, NULL,
+	sdev->dev = device_create(switch_class, NULL,
 		MKDEV(0, sdev->index), NULL, sdev->name);
 	if (IS_ERR(sdev->dev))
 		return PTR_ERR(sdev->dev);
