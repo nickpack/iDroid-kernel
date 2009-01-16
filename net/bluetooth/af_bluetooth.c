@@ -142,7 +142,7 @@ static void bt_reclassify_sock_lock(struct socket *sock, int proto)
 #ifdef CONFIG_ANDROID_PARANOID_NETWORK
 static inline int current_has_bt_admin(void)
 {
-	return (!current->euid || in_egroup_p(AID_NET_BT_ADMIN));
+	return (!current_euid() || in_egroup_p(AID_NET_BT_ADMIN));
 }
 
 static inline int current_has_bt(void)
