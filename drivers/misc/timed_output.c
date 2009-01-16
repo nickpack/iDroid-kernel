@@ -72,7 +72,7 @@ int timed_output_dev_register(struct timed_output_dev *tdev)
 		return ret;
 
 	tdev->index = atomic_inc_return(&device_count);
-	tdev->dev = device_create_drvdata(timed_output_class, NULL,
+	tdev->dev = device_create(timed_output_class, NULL,
 		MKDEV(0, tdev->index), NULL, tdev->name);
 	if (IS_ERR(tdev->dev))
 		return PTR_ERR(tdev->dev);
