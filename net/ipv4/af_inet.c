@@ -264,7 +264,7 @@ static inline int inet_netns_ok(struct net *net, int protocol)
 #ifdef CONFIG_ANDROID_PARANOID_NETWORK
 static inline int current_has_network(void)
 {
-	return (!current->euid || in_egroup_p(AID_INET) ||
+	return (!current_euid() || in_egroup_p(AID_INET) ||
 		in_egroup_p(AID_NET_RAW));
 }
 static inline int current_has_cap(int cap)
