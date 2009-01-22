@@ -82,7 +82,9 @@ static void l2cap_sock_timeout(unsigned long arg)
 
 	bh_lock_sock(sk);
 
-	if (sk->sk_state == BT_CONNECT &&
+	if (sk->sk_state == BT_CONNECTED || sk->sk_state == BT_CONFIG)
+		reason = ECONNREFUSED;
+	else if (sk->sk_state == BT_CONNECT &&
 			(l2cap_pi(sk)->link_mode & (L2CAP_LM_AUTH |
 					L2CAP_LM_ENCRYPT | L2CAP_LM_SECURE)))
 		reason = ECONNREFUSED;
@@ -2189,6 +2191,16 @@ static int l2cap_disconn_ind(struct hci_conn *hcon, u8 reason)
 	return 0;
 }
 
+static inline void l2cap_check_encryption(struct sock *sk, u8 encrypt)
+{
+	if (encrypt == 0x00) {
+		l2cap_sock_clear_timer(sk);
+		l2cap_sock_set_timer(sk, HZ * 5);
+	} else {
+		l2cap_sock_clear_timer(sk);
+	}
+}
+
 static int l2cap_auth_cfm(struct hci_conn *hcon, u8 status)
 {
 	struct l2cap_chan_list *l;
@@ -2283,7 +2295,7 @@ static int l2cap_encrypt_cfm(struct hci_conn *hcon, u8 status, u8 encrypt)
 					(sk->sk_state == BT_CONNECTED ||
 						sk->sk_state == BT_CONFIG) &&
 						!status && encrypt == 0x00) {
-			__l2cap_sock_close(sk, ECONNREFUSED);
+			l2cap_check_encryption(sk, encrypt);
 			bh_unlock_sock(sk);
 			continue;
 		}
