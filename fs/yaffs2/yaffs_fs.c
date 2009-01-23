@@ -724,10 +724,12 @@ static int yaffs_commit_write(struct file *f, struct page *pg, unsigned offset,
 	int nWritten;
 
 	unsigned spos = pos;
-	unsigned saddr = (unsigned)addr;
+	unsigned saddr;
 	
 	kva=kmap(pg);
 	addr = kva + offset;
+
+	saddr = (unsigned)addr;
 
 	T(YAFFS_TRACE_OS,
 	  (KERN_DEBUG "yaffs_commit_write addr %x pos %x nBytes %d\n", saddr,
