@@ -6263,7 +6263,13 @@ static int yaffs_ScanBackwards(yaffs_Device * dev)
 
 				dev->nFreeChunks++;
 				
-			} else if (tags.chunkId > 0) {
+			} else if (tags.eccResult == YAFFS_ECC_RESULT_UNFIXED){
+				T(YAFFS_TRACE_SCAN,
+				  (TSTR(" Unfixed ECC in chunk(%d:%d), chunk ignored"TENDSTR),
+  				  blk, c));
+
+  				  dev->nFreeChunks++;
+  			} else if (tags.chunkId > 0) {
 				/* chunkId > 0 so it is a data chunk... */
 				unsigned int endpos;
 				__u32 chunkBase =
