@@ -1710,11 +1710,14 @@ static inline int l2cap_connect_rsp(struct l2cap_conn *conn, struct l2cap_cmd_hd
 		l2cap_pi(sk)->dcid = dcid;
 		l2cap_pi(sk)->conf_state |= L2CAP_CONF_REQ_SENT;
 
+		l2cap_pi(sk)->conf_state &= ~L2CAP_CONF_CONNECT_PEND;
+
 		l2cap_send_cmd(conn, l2cap_get_ident(conn), L2CAP_CONF_REQ,
 					l2cap_build_conf_req(sk, req), req);
 		break;
 
 	case L2CAP_CR_PEND:
+		l2cap_pi(sk)->conf_state |= L2CAP_CONF_CONNECT_PEND;
 		break;
 
 	default:
@@ -2232,6 +2235,11 @@ static int l2cap_auth_cfm(struct hci_conn *hcon, u8 status)
 
 		bh_lock_sock(sk);
 
+		if (l2cap_pi(sk)->conf_state & L2CAP_CONF_CONNECT_PEND) {
+			bh_unlock_sock(sk);
+			continue;
+		}
+
 		if ((pi->link_mode & (L2CAP_LM_ENCRYPT | L2CAP_LM_SECURE)) &&
 					!(hcon->link_mode & HCI_LM_ENCRYPT) &&
 								!status) {
@@ -2301,6 +2309,11 @@ static int l2cap_encrypt_cfm(struct hci_conn *hcon, u8 status, u8 encrypt)
 		struct l2cap_pinfo *pi = l2cap_pi(sk);
 
 		bh_lock_sock(sk);
+
+		if (l2cap_pi(sk)->conf_state & L2CAP_CONF_CONNECT_PEND) {
+			bh_unlock_sock(sk);
+			continue;
+		}
 
 		if ((pi->link_mode & (L2CAP_LM_ENCRYPT | L2CAP_LM_SECURE)) &&
 					(sk->sk_state == BT_CONNECTED ||
