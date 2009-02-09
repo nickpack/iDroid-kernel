@@ -40,14 +40,11 @@
 #define HW3D_GRANT_GPU		_IOW(PMEM_IOCTL_MAGIC, 9, unsigned int)
 #define HW3D_WAIT_FOR_INTERRUPT	_IOW(PMEM_IOCTL_MAGIC, 10, unsigned int)
 
-int get_pmem_file(unsigned int fd, unsigned long *start, unsigned long *vstart,
+int get_pmem_file(int fd, unsigned long *start, unsigned long *vstart,
 		  unsigned long *end, struct file **filp);
-int get_pmem_fd(int fd, unsigned long *start, unsigned long *end);
 int get_pmem_user_addr(struct file *file, unsigned long *start,
 		       unsigned long *end);
 void put_pmem_file(struct file* file);
-void put_pmem_fd(int fd);
-void flush_pmem_fd(int fd, unsigned long start, unsigned long len);
 void flush_pmem_file(struct file *file, unsigned long start, unsigned long len);
 
 struct android_pmem_platform_data

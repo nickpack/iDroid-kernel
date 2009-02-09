@@ -737,7 +737,7 @@ int get_pmem_addr(struct file *file, unsigned long *start,
 	return 0;
 }
 
-int get_pmem_file(unsigned int fd, unsigned long *start, unsigned long *vstart,
+int get_pmem_file(int fd, unsigned long *start, unsigned long *vstart,
 		  unsigned long *len, struct file **filp)
 {
 	struct file *file;
@@ -760,13 +760,6 @@ end:
 	return -1;
 }
 
-int get_pmem_fd(int fd, unsigned long *start, unsigned long *len)
-{
-	unsigned long vstart;
-	return get_pmem_file(fd, start, &vstart, len, NULL);
-}
-
-
 void put_pmem_file(struct file *file)
 {
 	struct pmem_data *data;
@@ -787,32 +780,6 @@ void put_pmem_file(struct file *file)
 	up_write(&data->sem);
 #endif
 	fput(file);
-}
-
-void put_pmem_fd(int fd)
-{
-	struct file *file;
-	int put_needed;
-
-	file = fget_light(fd, &put_needed);
-	if (file == NULL)
-		return;
-	put_pmem_file(file);
-	fput_light(file, put_needed);
-}
-
-
-
-void flush_pmem_fd(int fd, unsigned long offset, unsigned long len)
-{
-	struct file *file;
-	int fput_needed;
-
-	file = fget_light(fd, &fput_needed);
-	if (file == NULL)
-		return;
-	flush_pmem_file(file, offset, len);
-	fput_light(file, fput_needed);
 }
 
 void flush_pmem_file(struct file *file, unsigned long offset, unsigned long len)
