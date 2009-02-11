@@ -708,9 +708,6 @@ int get_pmem_addr(struct file *file, unsigned long *start,
 	int id;
 
 	if (!is_pmem_file(file) || !has_allocation(file)) {
-#if PMEM_DEBUG
-		printk("pmem: requested pmem data from invalid file.\n");
-#endif
 		return -1;
 	}
 
