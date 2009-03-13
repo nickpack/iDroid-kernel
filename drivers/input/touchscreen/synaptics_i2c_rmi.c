@@ -101,6 +101,7 @@ static void synaptics_ts_work_func(struct work_struct *work)
 		ret = i2c_transfer(ts->client->adapter, msg, 2);
 		if (ret < 0) {
 			printk(KERN_ERR "synaptics_ts_work_func: i2c_transfer failed\n");
+			bad_data = 1;
 		} else {
 			/* printk("synaptics_ts_work_func: %x %x %x %x %x %x" */
 			/*        " %x %x %x %x %x %x %x %x %x, ret %d\n", */
