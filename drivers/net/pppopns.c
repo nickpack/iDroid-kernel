@@ -117,15 +117,14 @@ static void pppopns_xmit_core(struct work_struct *delivery_work)
 
 	set_fs(KERNEL_DS);
 	while ((skb = skb_dequeue(&delivery_queue))) {
-		unsigned int length = skb->len;
 		struct sock *sk_raw = skb->sk;
-		struct kvec iov = {.iov_base = skb->data, .iov_len = length};
+		struct kvec iov = {.iov_base = skb->data, .iov_len = skb->len};
 		struct msghdr msg = {
 			.msg_iov = (struct iovec *)&iov,
-			.msg_iovlen = length,
+			.msg_iovlen = 1,
 			.msg_flags = MSG_NOSIGNAL | MSG_DONTWAIT,
 		};
-		sk_raw->sk_prot->sendmsg(NULL, sk_raw, &msg, length);
+		sk_raw->sk_prot->sendmsg(NULL, sk_raw, &msg, skb->len);
 		kfree_skb(skb);
 	}
 	set_fs(old_fs);
