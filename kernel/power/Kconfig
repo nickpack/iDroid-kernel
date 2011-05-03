@@ -85,9 +85,13 @@ choice
 		  to the screen and notifies user-space when it should resume.
 endchoice
 
+config HIBERNATE_CALLBACKS
+	bool
+
 config HIBERNATION
 	bool "Hibernation (aka 'suspend to disk')"
 	depends on SWAP && ARCH_HIBERNATION_POSSIBLE
+	select HIBERNATE_CALLBACKS
 	select LZO_COMPRESS
 	select LZO_DECOMPRESS
 	---help---
@@ -152,7 +156,7 @@ config PM_STD_PARTITION
 
 config PM_SLEEP
 	def_bool y
-	depends on SUSPEND || HIBERNATION || XEN_SAVE_RESTORE
+	depends on SUSPEND || HIBERNATE_CALLBACKS
 
 config PM_SLEEP_SMP
 	def_bool y
