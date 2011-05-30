@@ -1,5 +1,5 @@
 menu "S5L8930 Device Type"
-	depends on MACH_S5L8930
+	depends on ARCH_S5L8930
 
 choice
 	prompt "Model"
