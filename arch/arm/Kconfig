@@ -722,6 +722,21 @@ config ARCH_S3C64XX
 	help
 	  Samsung S3C64XX series based systems
 
+config ARCH_S5L8930
+	bool "Samsung S5L8930"
+	select GENERIC_TIME
+	select GENERIC_CLOCKEVENTS
+	select SERIAL_CORE
+	select SERIAL_CORE_CONSOLE
+	select FB
+	select FB_DEFERRED_IO
+	select FRAMEBUFFER_CONSOLE
+#	select FB_S5L8930
+	select HAVE_CLK
+	select GENERIC_GPIO
+	help
+	  Samsung S5L8930 based systems, aka the Apple A4 processor
+
 config ARCH_S5P64X0
 	bool "Samsung S5P6440 S5P6450"
 	select CPU_V6
@@ -974,6 +989,7 @@ source "arch/arm/mach-sa1100/Kconfig"
 
 source "arch/arm/plat-samsung/Kconfig"
 source "arch/arm/plat-s3c24xx/Kconfig"
+source "arch/arm/plat-s5l8930/Kconfig"
 source "arch/arm/plat-s5p/Kconfig"
 
 source "arch/arm/plat-spear/Kconfig"

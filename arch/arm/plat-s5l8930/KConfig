@@ -1,0 +1,29 @@
+menu "S5L8930 Device Type"
+	depends on MACH_S5L8930
+
+choice
+	prompt "Model"
+	default IPHONE_4
+
+config IPHONE_4
+	bool "iPhone 4"
+	help
+	  Select this option if the device is a forth generation iPhone.
+
+config IPAD_1G
+	bool "iPad 1G"
+	help
+	  Select this option if the device is a first generation iPad.
+
+config IPODTOUCH_4G
+	bool "iPod Touch 4G"
+	help
+	  Select this option if the device is a forth generation iPod Touch.
+	
+config APPLETV_2G
+	bool "Apple TV 2G"
+	help
+	  Select this option if the device is a second generation Apple TV 2
+
+endchoice
+endmenu
