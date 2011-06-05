@@ -1,0 +1,4 @@
+config SND_APPLE_IPHONE
+	tristate "Audio for the Apple iPhone"
+	select SND_SOC_WM8991 if IPHONE_3G
+	depends on MACH_APPLE_IPHONE

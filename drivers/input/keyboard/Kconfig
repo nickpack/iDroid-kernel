@@ -530,4 +530,11 @@ config KEYBOARD_W90P910
 	  To compile this driver as a module, choose M here: the
 	  module will be called w90p910_keypad.
 
+config KEYBOARD_GPIO_IPHONE
+	tristate "GPIO Buttons for iPhone"
+	depends on GENERIC_GPIO
+	help
+	  Use flipping level GPIO interrupts rather than edge
+          interrupts.
+
 endif

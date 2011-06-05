@@ -720,4 +720,18 @@ config TOUCHSCREEN_TPS6507X
 	  To compile this driver as a module, choose M here: the
 	  module will be called tps6507x_ts.
 
+config TOUCHSCREEN_ZEPHYR
+	tristate "Apple Zephyr Touchscreen Controller"
+	depends on SPI_MASTER
+	help
+	  Say Y if you want support for the original Zephyr controller
+	  used in the first iPhone and iPod Touch.
+
+config TOUCHSCREEN_ZEPHYR2
+	tristate "Apple Zephyr 2 Touchscreen Controller"
+	depends on SPI_MASTER
+	help
+	  Say Y if you want support for the second generation Zephyr
+	  controller used in the newer Apple products.
+
 endif

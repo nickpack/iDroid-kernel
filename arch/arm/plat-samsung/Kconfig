@@ -6,7 +6,7 @@
 
 config PLAT_SAMSUNG
 	bool
-	depends on PLAT_S3C24XX || ARCH_S3C64XX || PLAT_S5P
+	depends on PLAT_S3C24XX || ARCH_S3C64XX || PLAT_S5P || PLAT_S5L
 	select NO_IOPORT
 	default y
 	help

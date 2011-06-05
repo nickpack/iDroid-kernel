@@ -1285,6 +1285,11 @@ config SENSORS_MC13783_ADC
         help
           Support for the A/D converter on MC13783 PMIC.
 
+config SENSORS_IPHONE_ACCEL
+	tristate "iPhone/iPod Accelerometer"
+	select INPUT_POLLDEV
+	depends on PLAT_S5L && I2C
+
 if ACPI
 
 comment "ACPI drivers"

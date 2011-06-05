@@ -1612,4 +1612,9 @@ config SERIAL_MXS_AUART_CONSOLE
 	help
 	  Enable a MXS AUART port to be the system console.
 
+config SERIAL_APPLE_IPHONE
+	tristate "Apple iPhone serial support"
+	depends on PLAT_S5L
+	select SERIAL_CORE
+
 endmenu

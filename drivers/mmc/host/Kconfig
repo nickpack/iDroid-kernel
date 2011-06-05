@@ -548,3 +548,8 @@ config MMC_USHC
 
 	  Note: These controllers only support SDIO cards and do not
 	  support MMC or SD memory cards.
+
+config SDIO_IPHONE
+	tristate "iPhone SDIO support"
+	depends on PLAT_S5L
+

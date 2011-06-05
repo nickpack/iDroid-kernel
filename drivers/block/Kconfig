@@ -506,4 +506,10 @@ config BLK_DEV_RBD
 
 	  If unsure, say N.
 
+config IPHONE_BLK
+	tristate "iPhone NAND block device"
+	depends on PLAT_S5L
+	help
+	  Support for the iPhone's NAND.
+
 endif # BLK_DEV

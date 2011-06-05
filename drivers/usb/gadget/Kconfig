@@ -559,6 +559,32 @@ config USB_CI13XXX_MSM
 	default USB_GADGET
 	select USB_GADGET_SELECTED
 
+config USB_GADGET_DWC_OTG
+	boolean "Synopsys DWC OTG Controller"
+	select USB_GADGET_DUALSPEED
+	help
+	   This driver provides USB Device Controller support for the
+	   iPhone.
+
+config USB_DWC_OTG
+	tristate
+	depends on USB_GADGET_DWC_OTG
+	default USB_GADGET
+	select USB_GADGET_SELECTED
+
+config USB_DWC_OTG_INTERNAL_DMA
+	boolean "Synopsys DWC OTG internal DMA Mode"
+	depends on USB_GADGET_DWC_OTG
+	default USB_GADGET
+	help
+	   Enable this DWC internal DMA mode for USB host mode operation.
+
+	   Currently we are still seeing problems with this internal DMA
+	   mode and some USB gadget device drivers in USB device mode.
+	   These gadgets are: ethernet gadget and zero gadget. For those
+	   gagdets, please disable the internal DMA mode (use slave mode)
+	   for now.
+
 #
 # LAST -- dummy/emulated controller
 #
