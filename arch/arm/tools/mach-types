@@ -1113,3 +1113,8 @@ blissc			MACH_BLISSC		BLISSC			3491
 thales_adc		MACH_THALES_ADC		THALES_ADC		3492
 ubisys_p9d_evp		MACH_UBISYS_P9D_EVP	UBISYS_P9D_EVP		3493
 atdgp318		MACH_ATDGP318		ATDGP318		3494
+
+# Quick hack until linux.org.uk comes back online
+iphone2g			MACH_IPHONE_2G		IPHONE_2G			9999
+iphone3g			MACH_IPHONE_3G		IPHONE_3G			9998
+ipod_touch_1g		MACH_IPOD_TOUCH_1G	IPOD_TOUCH_1G		9997
