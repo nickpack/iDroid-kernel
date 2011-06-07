@@ -1,5 +1,5 @@
 /*
- * arch/arm/mach-apple_iphone/spi.c - SPI functionality for the iPhone
+ * arch/arm/mach-s5l8900/spi.c - SPI functionality for the iPhone
  *
  * Copyright (C) 2008 Yiduo Wang
  *
@@ -36,6 +36,7 @@
 #include <mach/iphone-clock.h>
 #include <mach/gpio.h>
 #include <mach/iphone-spi.h>
+#include <asm/mach-types.h>
 
 #define GET_BITS(x, start, length)	((((u32)(x)) << (32 - ((start) + (length)))) >> (32 - (length)))
 #define spi_dbg(m, args...)			dev_dbg(&(m)->spi_dev->dev, args)
@@ -515,11 +516,7 @@ static struct iphone_spi_master iphone_spi1 = {
 
 static struct iphone_spi_master iphone_spi2 = {
 	.io_base = IPHONE_SPI2_REGBASE,
-#ifdef CONFIG_IPHONE_3G
-	.cs_callback = &iphone_spi_mrdy_cs,
-#else
 	.cs_callback = &iphone_spi_gpio_cs,
-#endif
 	.clock_source = NCLK,
 	.irq = IPHONE_SPI2_IRQ,
 	.clockgate = IPHONE_SPI2_CLOCKGATE,
@@ -542,6 +539,9 @@ static int __init iphone_spi_probe(struct platform_device *_pdev)
 		struct spi_master *spi_master = spi_alloc_master(&_pdev->dev, 0);
 		spi_master_set_devdata(spi_master, master);
 		master->spi_dev = spi_master;
+
+		if(i == 2 && machine_is_iphone_3g())
+			master->cs_callback = iphone_spi_mrdy_cs;
 
 		spi_master->bus_num = i;
 		spi_master->num_chipselect = 64;

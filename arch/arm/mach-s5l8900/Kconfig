@@ -16,3 +16,50 @@ config CPU_S5L8900
 	help
 	  Enable S5L8900 CPU support
 
+config MACH_IPHONE_2G
+	bool "iPhone 2G"
+	select CPU_S5L8900
+	select TOUCHSCREEN_ZEPHYR
+	select IPHONE_BLK
+	select USB_DWC_OTG
+	select FB_APPLE_IPHONE
+	select KEYBOARD_GPIO_IPHONE
+	select SERIAL_APPLE_IPHONE
+	select SENSORS_IPHONE_ACCEL
+	select SDIO_IPHONE
+	select SND_APPLE_IPHONE
+	help
+	  Machine support for the first generation iPhone.
+
+config MACH_IPHONE_3G
+	bool "iPhone 3G"
+	select CPU_S5L8900
+	select TOUCHSCREEN_ZEPHYR2
+	select IPHONE_BLK
+	select USB_DWC_OTG
+	select FB_APPLE_IPHONE
+	select KEYBOARD_GPIO_IPHONE
+	select SERIAL_APPLE_IPHONE
+	select SENSORS_IPHONE_ACCEL
+	select SDIO_IPHONE
+	select IPHONE_3G_VIBRATOR
+	select SND_SOC_WM8991
+	help
+	  Machine support for the second iPhone.
+
+config MACH_IPOD_TOUCH_1G
+	bool "iPod Touch 1G"
+	select CPU_S5L8900
+	select TOUCHSCREEN_ZEPHYR2
+	select IPHONE_BLK
+	select USB_DWC_OTG
+	select FB_APPLE_IPHONE
+	select KEYBOARD_GPIO_IPHONE
+	select SERIAL_APPLE_IPHONE
+	select SENSORS_IPHONE_ACCEL
+	select SDIO_IPHONE
+	select IPHONE_3G_VIBRATOR
+	select SND_SOC_WM8991
+	help
+	  Machine support for the fist generation iPod Touch.
+
