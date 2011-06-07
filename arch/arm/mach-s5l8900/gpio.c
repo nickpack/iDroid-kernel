@@ -11,6 +11,7 @@
 #include <mach/iphone-clock.h>
 #include <mach/gpio.h>
 #include <linux/irq.h>
+#include <asm/mach-types.h>
 
 #define GET_BITS(x, start, length) ((((u32)(x)) << (32 - ((start) + (length)))) >> (32 - (length)))
 
@@ -108,18 +109,8 @@ static struct platform_device iphone_device_gpiokeys = {
 	},
 };
 
-#ifndef CONFIG_IPHONE_3G
 static struct gpio_switch_platform_data headset_switch_data = {
 	.name = "h2w",
-#ifdef CONFIG_IPHONE_2G
-	.gpio = 0x1402,
-	.state_on = "0",
-	.state_off = "1",
-#else
-	.gpio = 0x1205,
-	.state_on = "1",
-	.state_off = "0",
-#endif
 };
 
 static struct platform_device headset_switch_device = {
@@ -128,11 +119,13 @@ static struct platform_device headset_switch_device = {
 		.platform_data = &headset_switch_data,
 	}
 }; 
-#endif
 
 static int iphone_gpio_setup(void) {
 	int i;
 	int ret;
+
+	if(machine_is_ipod_touch_1g())
+		iphone_gpio_keys_table[0].gpio = GPIO_BUTTONS_HOME_IPOD;
 
 	for(i = 0; i < GPIO_NUMINTGROUPS; i++) {
 		// writes to all the interrupt status register to acknowledge and discard any pending
@@ -181,11 +174,32 @@ static int iphone_gpio_setup(void) {
 	iphone_clock_gate_switch(GPIO_CLOCKGATE, 1);
 
 	platform_device_register(&iphone_device_gpiokeys);
-#ifndef CONFIG_IPHONE_3G
-	platform_device_register(&headset_switch_device);
-#endif
-	printk("iphone-gpio: GPIO input devices registered\n");
 
+	// TODO: This needs to end up in mach_x.c -- Ricky26
+	{
+		int has_switch = 0;
+
+		if(machine_is_iphone_2g())
+		{
+			headset_switch_data.gpio = 0x1402;
+			headset_switch_data.state_on = "0";
+			headset_switch_data.state_off = "1";
+			has_switch = 1;
+		}
+
+		if(machine_is_ipod_touch_1g())
+		{
+			headset_switch_data.gpio = 0x1205;
+			headset_switch_data.state_on = "1";
+			headset_switch_data.state_off = "0";
+			has_switch = 1;
+		}
+
+		if(has_switch)
+			platform_device_register(&headset_switch_device);
+	}
+
+	printk("iphone-gpio: GPIO input devices registered\n");
 	return 0;
 }
 

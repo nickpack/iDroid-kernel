@@ -1,5 +1,5 @@
 /*
- *  arch/arm/mach-apple_iphone/usb.c
+ *  arch/arm/mach-s5l8900/usb.c
  *
  *  Copyright (C) 2008 Yiduo Wang
  *
@@ -24,8 +24,6 @@
 #include <linux/usb/android_composite.h>
 
 #include <mach/map.h>
-
-#include "core.h"
 
 static struct resource s3c_usb_hsotg_resources[] = {
 	[0] = {
@@ -78,7 +76,9 @@ char *android_usb_functions[] = {
 	"rndis",
 #endif
 };
+#endif
 
+#ifdef CONFIG_USB_ANDROID
 static struct android_usb_product android_products[] = {
 	{
 		.product_id	= 0x1234,
@@ -88,15 +88,7 @@ static struct android_usb_product android_products[] = {
 };
 
 struct android_usb_platform_data android_usb_config = {
-#ifdef CONFIG_IPHONE_3G
-	.product_name		= "iPhone3G",
-#endif
-#ifdef CONFIG_IPHONE_2G
-	.product_name		= "iPhone2G",
-#endif
-#ifdef CONFIG_IPODTOUCH_1G
-	.product_name		= "iPodTouch1G",
-#endif
+	.product_name		= "S5L8900",
 
 	//.vendor_id			= TODO,
 	//.product_id			= 0x1234,
@@ -121,17 +113,7 @@ struct platform_device android_usb = {
 
 struct usb_mass_storage_platform_data android_usb_storage_config = {
 	.vendor		= "Apple",
-
-#ifdef CONFIG_IPHONE_3G
-	.product	= "iPhone3G",
-#endif
-
-#ifdef CONFIG_IPHONE_2G
-	.product	= "iPhone2G",
-#endif
-#ifdef CONFIG_IPODTOUCH_1G
-	.product	= "iPodTouch1G",
-#endif
+	.product	= "S5L8900",
 
 	.release	= 1,
 
@@ -164,7 +146,11 @@ static int __init iphone_usb_init(void)
 	ret = platform_device_register(&s3c_device_usb_hsotg);
 	if (ret)
 		goto out;
+
 #ifdef CONFIG_USB_ANDROID
+
+	// TODO: Replace product names with machine name.
+
 	ret = platform_device_register(&android_usb_ether);
 	if (ret)
 		goto out_s3c;
@@ -175,6 +161,7 @@ static int __init iphone_usb_init(void)
 	if (ret)
 		goto out_android_storage;
 #endif
+
 	return 0;
 
 #ifdef CONFIG_USB_ANDROID

@@ -1,5 +1,5 @@
 /*
- * arch/arm/mach-apple_iphone/iphone.c - The base machine layout and functions.
+ * arch/arm/mach-s5l8900/mach_iphone2g.c - The base machine layout and functions.
  *
  * Copyright (C) 2008 Yiduo Wang
  *
@@ -41,7 +41,6 @@
 #include <asm/mach/time.h>
 #include <asm/mach/irq.h>
 
-#include "core.h"
 #include "lcd.h"
 #include <mach/iphone-dma.h>
 #include <mach/iphone-i2c.h>
@@ -54,6 +53,9 @@
 
 #include <asm/system.h>
 #include <mach/system.h>
+
+extern void __init iphone_init_irq(void);
+extern struct sys_timer iphone_timer;
 
 static struct map_desc iphone_io_desc[] __initdata = {
 	{
@@ -208,7 +210,7 @@ static struct map_desc iphone_io_desc[] __initdata = {
 	},
 };
 
-void __init iphone_map_io(void)
+static void __init iphone_map_io(void)
 {
 	printk("iphone: initializing io map\n");
 	iotable_init(iphone_io_desc, ARRAY_SIZE(iphone_io_desc));
@@ -218,18 +220,11 @@ static struct i2c_board_info __initdata iphone_i2c0[] = {
 	{
 		I2C_BOARD_INFO("iphone-accel", 0x3a),
 	},
-#if POWER_PCF50633
 	{
 		I2C_BOARD_INFO("pcf50633", 0xe6),
 		.irq = IPHONE_GPIO_IRQS + 0x55,
 		.platform_data = &pcf50633_pdata,
 	},
-#endif
-#ifdef CONFIG_IPHONE_PMU
-	{
-		I2C_BOARD_INFO("iphone-pmu", 0xe6),
-	},
-#endif
 	{
 		I2C_BOARD_INFO("tsl2561", 0x92),
 	},
@@ -244,15 +239,13 @@ static struct i2c_board_info __initdata iphone_i2c1[] = {
 static struct spi_board_info __initdata iphone_spi[] = {
 };
 
-void iphone_power_off(void)
+static void iphone_power_off(void)
 {
-#if POWER_PCF50633
 	pcf50633_power_off();
-#endif
 	arch_reset('h', NULL);
 }
 
-void __init iphone_init(void)
+static void __init iphone_init(void)
 {
 	printk("iphone: platform init\r\n");
 
@@ -272,7 +265,7 @@ void __init iphone_init(void)
 	platform_device_register(&iphone_i2c);
 }
 
-void __exit iphone_exit(void)
+static void __exit iphone_exit(void)
 {
 	platform_device_unregister(&iphone_i2c);
 	platform_device_unregister(&iphone_nand);
@@ -282,8 +275,6 @@ module_exit(iphone_exit);
 
 MACHINE_START(IPHONE_2G, "Apple iPhone 2G")
 	/* Maintainer: iDroid Project */
-	.phys_io	= 0x38000000,
-	.io_pg_offst	= (IO_ADDRESS(0x38000000) >> 18) & 0xfffc,
 	.boot_params	= 0x09000000,
 	.map_io		= iphone_map_io,
 	.init_irq	= iphone_init_irq,

@@ -34,6 +34,7 @@
 #include <mach/iphone-spi.h>
 #include <mach/gpio.h>
 #include <asm/setup.h>
+#include <asm/mach-types.h>
 
 #define ATAG_IPHONE_PROX_CAL   0x54411004
 #define ATAG_IPHONE_MT_CAL     0x54411005
@@ -44,14 +45,6 @@
 #else
 #	define MT_GPIO_POWER 0x701
 #	define MT_ATN_INTERRUPT 0x9b
-#endif
-
-#ifdef CONFIG_IPHONE_3G
-#	define MT_SPI 1
-#	define MT_SPI_CS GPIO_SPI1_CS0
-#else
-#	define MT_SPI 2
-#	define MT_SPI_CS GPIO_SPI2_CS0
 #endif
 
 #define MT_INFO_FAMILYID 0xD1
@@ -1048,19 +1041,37 @@ int zephyr2_setup(struct zephyr2_data *_z2, const u8* constructedFirmware, int c
 	_z2->GetInfoPacket = (u8*) kmalloc(MAX_BUFFER_SIZE, GFP_KERNEL);
 	_z2->GetResultPacket = (u8*) kmalloc(MAX_BUFFER_SIZE, GFP_KERNEL);
 
-	if(request_irq(MT_ATN_INTERRUPT + IPHONE_GPIO_IRQS, zephyr2_irq, IRQF_TRIGGER_FALLING, "iphone-multitouch", _z2))
+
+	// TODO: Holy mother of hacks, we need to add platform data to this driver.
 	{
-		printk("zephyr2: Failed to request z2 interrupt.\n");
-		return -1;
+		int irq;
+		int pwr_gpio;
+
+		if(machine_is_iphone_2g())
+		{
+			irq = 0xa3;
+			pwr_gpio = 0x804;
+		}
+		else
+		{
+			irq = 0x9b;
+			pwr_gpio = 0x701;
+		}
+
+		if(request_irq(irq + IPHONE_GPIO_IRQS, zephyr2_irq, IRQF_TRIGGER_FALLING, "iphone-multitouch", _z2))
+		{
+			printk("zephyr2: Failed to request z2 interrupt.\n");
+			return -1;
+		}
+
+		// Power up the device (turn it off then on again. ;])
+		printk("zephyr2: Powering Up Multitouch!\n");
+		iphone_gpio_pin_output(pwr_gpio, 0);
+		msleep(200);
+
+		iphone_gpio_pin_output(pwr_gpio, 1);
+		msleep(15);
 	}
-
-	// Power up the device (turn it off then on again. ;])
-	printk("zephyr2: Powering Up Multitouch!\n");
-	iphone_gpio_pin_output(MT_GPIO_POWER, 0);
-	msleep(200);
-
-	iphone_gpio_pin_output(MT_GPIO_POWER, 1);
-	msleep(15);
 
 	for(i = 0; i < 4; ++i)
 	{
@@ -1090,20 +1101,21 @@ int zephyr2_setup(struct zephyr2_data *_z2, const u8* constructedFirmware, int c
 
 	printk("zephyr2: loaded %d byte preconstructed firmware\n", constructedFirmwareLen);
 
-#ifndef CONFIG_IPODTOUCH_1G
-	if(!loadProxCal(_z2, prox_cal, prox_cal_size))
+	if(!machine_is_ipod_touch_1g())
 	{
-		printk("zephyr2: could not load proximity calibration data\n");
-		err = -1;
-		kfree(_z2->InputPacket);
-		kfree(_z2->OutputPacket);
-		kfree(_z2->GetInfoPacket);
-		kfree(_z2->GetResultPacket);
-		return err;
-	}
+		if(!loadProxCal(_z2, prox_cal, prox_cal_size))
+		{
+			printk("zephyr2: could not load proximity calibration data\n");
+			err = -1;
+			kfree(_z2->InputPacket);
+			kfree(_z2->OutputPacket);
+			kfree(_z2->GetInfoPacket);
+			kfree(_z2->GetResultPacket);
+			return err;
+		}
 
-	printk("zephyr2: loaded %d byte proximity calibration data\n", prox_cal_size);
-#endif
+		printk("zephyr2: loaded %d byte proximity calibration data\n", prox_cal_size);
+	}
 
 	if(!loadCal(_z2, cal, cal_size))
 	{

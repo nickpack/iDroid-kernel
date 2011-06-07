@@ -20,9 +20,6 @@
 // Constants
 #define EventTimer 4
 #define TicksPerSec 12000000
-#ifdef CONFIG_IPHONE_3G
-#define VibratorTimer 5
-#endif
 
 // Devices
 

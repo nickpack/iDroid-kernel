@@ -9,18 +9,15 @@
 #include <linux/workqueue.h>
 #include <mach/gpio.h>
 #include <linux/slab.h>
+#include <asm/mach-types.h>
 
 #define SDIO_PA 0x38D00000
 #define SDIO_CLOCKGATE 0xB
 #define SDIO_INT 0x2A
 
-#ifdef CONFIG_IPODTOUCH_1G
+// These are required on ipt1g
 #define SDIO_GPIO_POWER 0x1701
-#endif
-
-#ifndef CONFIG_IPODTOUCH_1G
 #define SDIO_GPIO_DEVICE_RESET 0x607
-#endif
 
 #define SDIO_CTRL       0x0
 #define SDIO_DCTRL      0x4
@@ -175,19 +172,18 @@ static int sdio_reset(struct iphone_sdio* sdio)
 {
 	int ret;
 
-#ifdef SDIO_GPIO_POWER
-	iphone_gpio_pin_output(SDIO_GPIO_POWER, 0);
-	msleep(5);
-	iphone_gpio_pin_output(SDIO_GPIO_POWER, 1);
-	msleep(10);
-#endif
+	if(machine_is_ipod_touch_1g())
+	{
+		iphone_gpio_pin_output(SDIO_GPIO_POWER, 0);
+		msleep(5);
+		iphone_gpio_pin_output(SDIO_GPIO_POWER, 1);
+		msleep(10);
 
-#ifdef SDIO_GPIO_DEVICE_RESET
-	iphone_gpio_pin_output(SDIO_GPIO_DEVICE_RESET, 1);
-	msleep(5);
-	iphone_gpio_pin_output(SDIO_GPIO_DEVICE_RESET, 0);
-	msleep(10);
-#endif
+		iphone_gpio_pin_output(SDIO_GPIO_DEVICE_RESET, 1);
+		msleep(5);
+		iphone_gpio_pin_output(SDIO_GPIO_DEVICE_RESET, 0);
+		msleep(10);
+	}
 
 	ret = sdio_wait_for_ready(sdio, 100);
 	if(ret)

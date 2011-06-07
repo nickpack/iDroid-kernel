@@ -1,3 +1,5 @@
+comment "Machine Types"
+
 config PLAT_S5L
 	bool
 	depends on ARCH_S5L
@@ -5,71 +7,7 @@ config PLAT_S5L
 	select ARM_VIC
 	select NO_IOPORT
 	select ARCH_REQUIRE_GPIOLIB
-	#select S3C_GPIO_TRACK
-	#select S5P_GPIO_DRVSTR
-	#select SAMSUNG_GPIOLIB_4BIT
-	#select S3C_GPIO_CFG_S3C64XX
-	#select S3C_GPIO_PULL_UPDOWN
-	#select S3C_GPIO_CFG_S3C24XX
-	#select PLAT_SAMSUNG
-	#select SAMSUNG_CLKSRC
-	#select SAMSUNG_IRQ_VIC_TIMER
-	#select SAMSUNG_IRQ_UART
 	select GENERIC_CLOCKEVENTS
 	help
 	  Base platform code for Samsung's S5L series SoC.
-
-choice
-	prompt "Machine Type"
-	default MACH_IPHONE_2G
-
-config MACH_IPHONE_2G
-	bool "iPhone 2G"
-	select CPU_S5L8900
-	select TOUCHSCREEN_ZEPHYR
-	select IPHONE_BLK
-	select USB_DWC_OTG
-	select FB_APPLE_IPHONE
-	select KEYBOARD_GPIO_IPHONE
-	select SERIAL_APPLE_IPHONE
-	select SENSORS_IPHONE_ACCEL
-	select SDIO_IPHONE
-	select SND_APPLE_IPHONE
-	help
-	  Machine support for the first generation iPhone
-
-config MACH_IPHONE_3G
-	bool "iPhone 3G"
-	select CPU_S5L8900
-	select TOUCHSCREEN_ZEPHYR2
-	select IPHONE_BLK
-	select USB_DWC_OTG
-	select FB_APPLE_IPHONE
-	select KEYBOARD_GPIO_IPHONE
-	select SERIAL_APPLE_IPHONE
-	select SENSORS_IPHONE_ACCEL
-	select SDIO_IPHONE
-	select IPHONE_3G_VIBRATOR
-	select SND_SOC_WM8991
-	help
-	  Machine support for the second iPhone
-
-config MACH_IPOD_TOUCH_1G
-	bool "iPod Touch 1G"
-	select CPU_S5L8900
-	select TOUCHSCREEN_ZEPHYR2
-	select IPHONE_BLK
-	select USB_DWC_OTG
-	select FB_APPLE_IPHONE
-	select KEYBOARD_GPIO_IPHONE
-	select SERIAL_APPLE_IPHONE
-	select SENSORS_IPHONE_ACCEL
-	select SDIO_IPHONE
-	select IPHONE_3G_VIBRATOR
-	select SND_SOC_WM8991
-	help
-	  Machine support for the fist generation iPod Touch
-
-endchoice
-
 

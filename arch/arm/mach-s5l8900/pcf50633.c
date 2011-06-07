@@ -26,8 +26,6 @@
 
 #include <mach/pmu.h>
 
-#if POWER_PCF50633
-
 struct platform_device iphone_backlight = {
 	.name           = "pcf50633-backlight",
 	.id             = -1,
@@ -312,11 +310,8 @@ struct pcf50633_platform_data pcf50633_pdata = {
 	.num_batteries = ARRAY_SIZE(iphone_batteries),
 };
 
-#endif
-
 void pcf50633_power_off(void)
 {
-#if POWER_PCF50633
 	if(pcf50633)
 	{
 		pcf50633_reg_write(pcf50633, 0x0d, 0x1); // Only ONKEY can wake the device up.
@@ -326,12 +321,10 @@ void pcf50633_power_off(void)
 
 		printk("PCF50633 shutdown complete.\n");
 	}
-#endif
 }
 
 void pcf50633_suspend(void)
 {
-#if POWER_PCF50633
 	if(pcf50633)
 	{
 		pcf50633_reg_write(pcf50633, 0x0d, 0xFFFFFFFF); // Volatile, allow anything to wake
@@ -340,5 +333,4 @@ void pcf50633_suspend(void)
 
 		printk("PCF50633 suspend complete.\n");
 	}
-#endif
 }
