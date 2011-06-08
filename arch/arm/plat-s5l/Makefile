@@ -3,9 +3,11 @@
 #	This file is part of the iDroid Project 
 #	(http://www.idroidproject.org/).
 
-obj-y				:=
-obj-m				:=
-obj-n				:= dummy.o
-obj-				:=
+obj-y					:=
+obj-m					:=
+obj-n					:=
+obj-					:=
+
+obj-$(CONFIG_S5L_IRQ)	+= irq.o
 
 

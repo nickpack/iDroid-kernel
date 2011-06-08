@@ -1,0 +1,25 @@
+# Copyright (c) 2011 Richard Ian Taylor
+#
+#	This file is part of the iDroid Project 
+#	(http://www.idroidproject.org/).
+
+config CPU_S5L8930
+	bool
+	select PLAT_S5L
+	select S5L_IRQ
+	select CPU_V7
+	help
+	  Enable S5L8930 CPU support
+
+config MACH_IPHONE_4
+	bool "iPhone 4"
+	select CPU_S5L8930
+	help
+	  Enable support for the iPhone 4.
+
+config MACH_IPOD_TOUCH_4G
+	bool "iPod Touch 4G"
+	select CPU_S5L8930
+	help
+	  Enable support for the 4th generation
+	  iPod Touch.

@@ -1,3 +1,8 @@
+# Copyright (c) 2011 Richard Ian Taylor
+#
+#	This file is part of the iDroid Project 
+#	(http://www.idroidproject.org/).
+
 config CPU_S5L8900
 	bool
 	select PLAT_S5L
