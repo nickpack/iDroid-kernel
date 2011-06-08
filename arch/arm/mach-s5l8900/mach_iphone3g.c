@@ -218,7 +218,7 @@ static void __init iphone_map_io(void)
 
 static struct i2c_board_info __initdata iphone_i2c0[] = {
 	{
-		I2C_BOARD_INFO("iphone-accel", 0x3a),
+		I2C_BOARD_INFO("lis331dl", 0x3a),
 	},
 	{
 		I2C_BOARD_INFO("pcf50633", 0xe6),
