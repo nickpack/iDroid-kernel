@@ -1,9 +1,12 @@
+# Copyright (c) 2011 Richard Ian Taylor
+#
+#	This file is part of the iDroid Project 
+#	(http://www.idroidproject.org/).
+
 comment "Machine Types"
 
 config PLAT_S5L
 	bool
-	depends on ARCH_S5L
-	default y
 	select ARM_VIC
 	select NO_IOPORT
 	select ARCH_REQUIRE_GPIOLIB
@@ -11,3 +14,6 @@ config PLAT_S5L
 	help
 	  Base platform code for Samsung's S5L series SoC.
 
+config S5L_IRQ
+	bool
+	depends on PLAT_S5L
