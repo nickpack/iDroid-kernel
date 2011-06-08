@@ -1,3 +1,5 @@
 config SND_APPLE_IPHONE
-	tristate "Audio for the Apple iPhone"
+	tristate "WM8578"
 	depends on SND_SOC
+	---help---
+	Hacky driver for iPhone 2G and iPod Touch 1G Audio
