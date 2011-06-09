@@ -11,7 +11,7 @@ static struct platform_device fbdev = {
 	.name = "s5l8920_fb",
 
 	.dev = {
-		.platform_data = (void*)0x5F700000,
+		.platform_data = __va(0x5F700000),
 	},
 };
 
@@ -22,7 +22,7 @@ static void __init ip4_init(void)
 	{
 		int i;
 		for(i = 0; i < 400; i++)
-			writel(0xffffffff, 0x5f700000 + i*4);
+			writel(0xffffffff, phys_to_virt(0x5f700000 + i*4));
 	}
 
 	platform_device_register(&fbdev);

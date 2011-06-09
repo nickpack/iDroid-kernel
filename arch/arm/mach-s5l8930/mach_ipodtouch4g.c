@@ -11,7 +11,7 @@ static struct platform_device fbdev = {
 	.name = "s5l8920_fb",
 
 	.dev = {
-		.platform_data = (void*)0x4F700000,
+		.platform_data = __phys_to_virt(0x4F700000),
 	},
 };
 
@@ -22,10 +22,10 @@ static void __init ipt4g_init(void)
 	{
 		int i;
 		for(i = 0; i < 400; i++)
-			writel(0xffffffff, 0x4f700000 + i*4);
+			writel(0xffffffff, phys_to_virt(0x4f700000 + i*4));
 	}
 
-	platform_device_register(&fbdev);
+	//platform_device_register(&fbdev);
 
 	// TODO: Add ipt4g devices here!
 }
