@@ -2348,6 +2348,13 @@ config FB_APPLE_IPHONE
 	select FB_CFB_IMAGEBLIT
 	select FB_SYS_FOPS
 
+config FB_S5L8920
+	tristate "S5L8920 framebuffer support"
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	select FB_SYS_FOPS
+
 source "drivers/video/omap/Kconfig"
 source "drivers/video/omap2/Kconfig"
 
