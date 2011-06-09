@@ -384,7 +384,7 @@ static void __iomem *s5l8930_vics[] = {
 	(__iomem void*)VA_VIC0,
 	(__iomem void*)VA_VIC1,
 	(__iomem void*)VA_VIC2,
-	(__iomem void*)VA_VIC2,
+	(__iomem void*)VA_VIC3,
 };
 
 void __init s5l8930_init_irq(void)
