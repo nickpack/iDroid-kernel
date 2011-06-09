@@ -13,8 +13,8 @@ static void s5l8930_timer_set_mode(enum clock_event_mode mode,
 static int s5l8930_timer_set_next_event(unsigned long cycles,
 				    struct clock_event_device *evt)
 {
-	__raw_writel(cycles, S5L_TIMER0_VAL);
-	__raw_writel(S5L_TIMER_ENABLE, S5L_TIMER0_CTRL);
+	writel(cycles, S5L_TIMER0_VAL);
+	writel(S5L_TIMER_ENABLE, S5L_TIMER0_CTRL);
 	return 0;
 }
 
@@ -22,7 +22,7 @@ static irqreturn_t s5l8930_timer_interrupt(int irq, void* dev_id)
 {
 	struct clock_event_device *evt = dev_id;
 
-	__raw_writel(S5L_TIMER_DISABLE, S5L_TIMER0_CTRL);
+	writel(S5L_TIMER_DISABLE, S5L_TIMER0_CTRL);
 	evt->event_handler(evt);
 
 	return IRQ_HANDLED;
@@ -30,14 +30,14 @@ static irqreturn_t s5l8930_timer_interrupt(int irq, void* dev_id)
 
 static cycle_t s5l8930_clock_read(struct clocksource *cs)
 {
-	register uint32_t hi = __raw_readl(S5L_CLOCK_HI);
-	register uint32_t lo = __raw_readl(S5L_CLOCK_LO);
-	register uint32_t tst = __raw_readl(S5L_CLOCK_HI);
+	register uint32_t hi = readl(S5L_CLOCK_HI);
+	register uint32_t lo = readl(S5L_CLOCK_LO);
+	register uint32_t tst = readl(S5L_CLOCK_HI);
 
 	if(hi != tst)
 	{
 		hi = tst;
-		lo = __raw_readl(S5L_CLOCK_LO);
+		lo = readl(S5L_CLOCK_LO);
 	}
 
 	return (((uint64_t)hi) << 32) | lo;
@@ -75,17 +75,17 @@ static void __init s5l8930_timer_init(void)
 
 	printk("s5l8930-timer: initializing\n");
 
-	__raw_writel(__raw_readl(0xBF500004) | 0x80000000, 0xBF500004);
-	__raw_writel(0xEF0000, 0xBF101218);
-	__raw_writel(0xFC020408, 0xBF10121C);
-	__raw_writel(0x27C0011, 0xBF101220);
-	__raw_writel(0x1830006, 0xBF101228);
-	__raw_writel(0x12F0006, 0xBF101230);
-	__raw_writel(0x20404, 0xBF101224);
-	__raw_writel(0x20404, 0xBF10122C);
-	__raw_writel(0x20409, 0xBF101234);
-	__raw_writel(0, 0xBF101200);
-	__raw_writel(0x3F, 0xBF101000);
+	/*iowrite32(ioread32(__va(0xBF500004)) | 0x80000000, 0xBF500004);
+	iowrite32(0xEF0000, 0xBF101218);
+	iowrite32(0xFC020408, 0xBF10121C);
+	iowrite32(0x27C0011, 0xBF101220);
+	iowrite32(0x1830006, 0xBF101228);
+	iowrite32(0x12F0006, 0xBF101230);
+	iowrite32(0x20404, 0xBF101224);
+	iowrite32(0x20404, 0xBF10122C);
+	iowrite32(0x20409, 0xBF101234);
+	iowrite32(0, 0xBF101200);
+	iowrite32(0x3F, 0xBF101000);*/
 
 	clockevents_calc_mult_shift(&clockevent, S5L_CLOCK_HZ, 4);
 	clockevent.max_delta_ns = clockevent_delta2ns(0xF0000000, &clockevent);

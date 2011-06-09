@@ -20,7 +20,7 @@
 		.endm
 
 		.macro	get_irqnr_and_base, irqnr, irqstat, base, tmp
-		ldr	\base, =VA_VIC0
+		ldr	\base, =PA_VIC0
 		ldr	\irqstat, [\base, #0]           @ get masked status
 		cmp	\irqstat, #0
 		addeq	\base, \base, #0x10000
