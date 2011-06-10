@@ -12,7 +12,7 @@
 
 		.macro	addruart, rp, rv
 		ldr		\rp, =PA_UART0
-		ldr		\rv, =PA_UART0
+		ldr		\rv, =VA_UART0
 		.endm
 
 		.macro  senduart, rd, rx
