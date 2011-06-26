@@ -104,10 +104,10 @@ bool g_set_essid_before_scan = TRUE;
 #if defined(SOFTAP)
 #define WL_SOFTAP(x)
 static struct net_device *priv_dev;
-static bool		ap_cfg_running = FALSE;
-bool            ap_fw_loaded = FALSE;
+extern bool ap_cfg_running;
+extern bool ap_fw_loaded;
 struct net_device *ap_net_dev = NULL;
-tsk_ctl_t	ap_eth_ctl;  
+tsk_ctl_t ap_eth_ctl;
 static int wl_iw_set_ap_security(struct net_device *dev, struct ap_profile *ap);
 static int wl_iw_softap_deassoc_stations(struct net_device *dev, u8 *mac);
 #endif 
@@ -130,7 +130,6 @@ wl_iw_extra_params_t	g_wl_iw_params;
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25)) && 1
 
-static struct mutex	wl_start_lock;
 static struct mutex	wl_cache_lock;
 static struct mutex	wl_softap_lock;
 
@@ -1633,6 +1632,7 @@ int
 wl_control_wl_start(struct net_device *dev)
 {
 	int ret = 0;
+	wl_iw_t *iw;
 
 	WL_TRACE(("Enter %s \n", __FUNCTION__));
 
@@ -1640,8 +1640,15 @@ wl_control_wl_start(struct net_device *dev)
 		WL_ERROR(("%s: dev is null\n", __FUNCTION__));
 		return -1;
 	}
-	
-	DHD_OS_MUTEX_LOCK(&wl_start_lock);
+
+	iw = *(wl_iw_t **)netdev_priv(dev);
+
+	if (!iw) {
+		WL_ERROR(("%s: wl is null\n", __FUNCTION__));
+		return -1;
+	}
+
+	dhd_os_start_lock(iw->pub);
 
 	if (g_onoff == G_WLAN_SET_OFF) {
 		dhd_customer_gpio_wlan_ctrl(WLAN_RESET_ON);
@@ -1660,9 +1667,9 @@ wl_control_wl_start(struct net_device *dev)
 
 		g_onoff = G_WLAN_SET_ON;
 	}
-	WL_ERROR(("Exited %s \n", __FUNCTION__));
+	WL_TRACE(("Exited %s\n", __FUNCTION__));
 
-	DHD_OS_MUTEX_UNLOCK(&wl_start_lock);
+	dhd_os_start_unlock(iw->pub);
 	return ret;
 }
 
@@ -1674,6 +1681,7 @@ wl_iw_control_wl_off(
 )
 {
 	int ret = 0;
+	wl_iw_t *iw;
 
 	WL_TRACE(("Enter %s\n", __FUNCTION__));
 
@@ -1682,7 +1690,14 @@ wl_iw_control_wl_off(
 		return -1;
 	}
 
-	DHD_OS_MUTEX_LOCK(&wl_start_lock);
+	iw = *(wl_iw_t **)netdev_priv(dev);
+
+	if (!iw) {
+		WL_ERROR(("%s: wl is null\n", __FUNCTION__));
+		return -1;
+	}
+
+	dhd_os_start_lock(iw->pub);
 
 #ifdef SOFTAP
 	ap_cfg_running = FALSE;
@@ -1718,7 +1733,6 @@ wl_iw_control_wl_off(
 		sdioh_stop(NULL);
 #endif
 
-		
 		net_os_set_dtim_skip(dev, 0);
 
 		dhd_customer_gpio_wlan_ctrl(WLAN_RESET_OFF);
@@ -1726,7 +1740,7 @@ wl_iw_control_wl_off(
 		wl_iw_send_priv_event(dev, "STOP");
 	}
 
-	DHD_OS_MUTEX_UNLOCK(&wl_start_lock);
+	dhd_os_start_unlock(iw->pub);
 
 	WL_TRACE(("Exited %s\n", __FUNCTION__));
 
@@ -7385,10 +7399,9 @@ wl_iw_set_priv(
 	    }
 #endif 
 	    else {
-			WL_TRACE(("Unknown PRIVATE command %s\n", extra));
+			WL_ERROR(("Unknown PRIVATE command %s - ignored\n", extra));
 			snprintf(extra, MAX_WX_STRING, "OK");
 			dwrq->length = strlen("OK") + 1;
-			WL_ERROR(("Unknown PRIVATE command, ignored\n"));
 		}
 	}
 
@@ -8476,7 +8489,6 @@ wl_iw_attach(struct net_device *dev, void * dhdp)
 #endif
 
 	DHD_OS_MUTEX_INIT(&wl_cache_lock);
-	DHD_OS_MUTEX_INIT(&wl_start_lock);
 	DHD_OS_MUTEX_INIT(&wl_softap_lock);
 
 #if defined(WL_IW_USE_ISCAN)
@@ -8500,8 +8512,10 @@ wl_iw_attach(struct net_device *dev, void * dhdp)
 
 	
 	iscan->iscan_ex_params_p = (wl_iscan_params_t*)kmalloc(params_size, GFP_KERNEL);
-	if (!iscan->iscan_ex_params_p)
+	if (!iscan->iscan_ex_params_p) {
+		kfree(iscan);
 		return -ENOMEM;
+	}
 	iscan->iscan_ex_param_size = params_size;
 
 	
@@ -8516,7 +8530,7 @@ wl_iw_attach(struct net_device *dev, void * dhdp)
 #endif 
 
 	
-	iscan->timer_ms    = 3000;
+	iscan->timer_ms    = 8000;
 	init_timer(&iscan->timer);
 	iscan->timer.data = (ulong)iscan;
 	iscan->timer.function = wl_iw_timerfunc;
