@@ -11,30 +11,32 @@ static struct platform_device fbdev = {
 	.name = "s5l8920_fb",
 
 	.dev = {
-		.platform_data = __phys_to_virt(0x4F700000),
+		.platform_data = __va(0x5F700000),
 	},
 };
 
-static void __init ipt4g_init(void)
+static void __init ip4_init(void)
 {
-	s5l8930_init();
+	printk("%s\n", __func__);
 
-	{
-		int i;
-		for(i = 0; i < 400; i++)
-			writel(0xffffffff, phys_to_virt(0x4f700000 + i*4));
-	}
+	s5l8930_init();
 
 	//platform_device_register(&fbdev);
 
 	// TODO: Add ipt4g devices here!
 }
 
-MACHINE_START(IPOD_TOUCH_4G, "Apple iPod Touch 4G")
+static void __init ip4_init_early(void)
+{
+	printk("%s\n", __func__);
+}
+
+MACHINE_START(IPHONE_4, "Apple iPhone 4")
 	/* Maintainer: iDroid Project */
 	.boot_params	= 0x46000000,
 	.map_io		= s5l8930_map_io,
 	.init_irq	= s5l8930_init_irq,
 	.timer		= &s5l8930_timer,
-	.init_machine	= ipt4g_init,
+	.init_machine	= ip4_init,
+	.init_early		= ip4_init_early,
 MACHINE_END

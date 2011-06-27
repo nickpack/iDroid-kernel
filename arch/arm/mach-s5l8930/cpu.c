@@ -265,7 +265,7 @@ static struct map_desc s5l8930_iodesc[] __initdata = {
 		.length		= SZ_IOP1,
 		.type		= MT_DEVICE,
 	},
-	{
+	/*{
 		.virtual	= (unsigned long)VA_VXD,
 		.pfn		= __phys_to_pfn(PA_VXD),
 		.length		= SZ_VXD,
@@ -276,7 +276,7 @@ static struct map_desc s5l8930_iodesc[] __initdata = {
 		.pfn		= __phys_to_pfn(PA_SGX),
 		.length		= SZ_SGX,
 		.type		= MT_DEVICE,
-	},
+	},*/
 	{
 		.virtual	= (unsigned long)VA_VENC,
 		.pfn		= __phys_to_pfn(PA_VENC),
@@ -377,7 +377,9 @@ static struct map_desc s5l8930_iodesc[] __initdata = {
 
 void __init s5l8930_map_io(void)
 {
+	printk("%s\n", __func__);
 	iotable_init(s5l8930_iodesc, ARRAY_SIZE(s5l8930_iodesc));
+	printk("%s done\n", __func__);
 }
 
 static void __iomem *s5l8930_vics[] = {
@@ -389,9 +391,12 @@ static void __iomem *s5l8930_vics[] = {
 
 void __init s5l8930_init_irq(void)
 {
+	printk("%s\n", __func__);
 	s5l_init_vics(s5l8930_vics, ARRAY_SIZE(s5l8930_vics));
+	printk("%s done\n", __func__);
 }
 
 void __init s5l8930_init(void)
 {
+	printk("%s\n", __func__);
 }

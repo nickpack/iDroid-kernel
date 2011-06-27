@@ -4,37 +4,27 @@
 #include <asm/mach-types.h>
 #include <linux/platform_device.h>
 
-// tmp
-#include <asm/io.h>
-
 static struct platform_device fbdev = {
 	.name = "s5l8920_fb",
 
 	.dev = {
-		.platform_data = __va(0x5F700000),
+		.platform_data = __phys_to_virt(0xF700000),
 	},
 };
 
-static void __init ip4_init(void)
+static void __init ipt4g_init(void)
 {
 	s5l8930_init();
 
-	{
-		int i;
-		for(i = 0; i < 400; i++)
-			writel(0xffffffff, phys_to_virt(0x5f700000 + i*4));
-	}
-
-	platform_device_register(&fbdev);
+	//platform_device_register(&fbdev);
 
 	// TODO: Add ipt4g devices here!
 }
 
-MACHINE_START(IPHONE_4, "Apple iPhone 4")
+MACHINE_START(IPOD_TOUCH_4G, "Apple iPod Touch 4G")
 	/* Maintainer: iDroid Project */
-	.boot_params	= 0x46000000,
 	.map_io		= s5l8930_map_io,
 	.init_irq	= s5l8930_init_irq,
 	.timer		= &s5l8930_timer,
-	.init_machine	= ip4_init,
+	.init_machine	= ipt4g_init,
 MACHINE_END
