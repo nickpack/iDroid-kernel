@@ -11,6 +11,6 @@
 #ifndef  _S5L8930_VMALLOC_
 #define  _S5L8930_VMALLOC_
 
-#define VMALLOC_END		(0x80000000)
+#define VMALLOC_END		(0xF0000000)
 
 #endif //_S5L8930_VMALLOC_

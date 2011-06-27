@@ -11,6 +11,6 @@
 #ifndef  _S5L8930_MEMORY_
 #define  _S5L8930_MEMORY_
 
-#define PHYS_OFFSET	UL(0)
+#define PLAT_PHYS_OFFSET	UL(0)
 
 #endif //_S5L8930_MEMORY_

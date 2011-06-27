@@ -75,18 +75,6 @@ static void __init s5l8930_timer_init(void)
 
 	printk("s5l8930-timer: initializing\n");
 
-	/*iowrite32(ioread32(__va(0xBF500004)) | 0x80000000, 0xBF500004);
-	iowrite32(0xEF0000, 0xBF101218);
-	iowrite32(0xFC020408, 0xBF10121C);
-	iowrite32(0x27C0011, 0xBF101220);
-	iowrite32(0x1830006, 0xBF101228);
-	iowrite32(0x12F0006, 0xBF101230);
-	iowrite32(0x20404, 0xBF101224);
-	iowrite32(0x20404, 0xBF10122C);
-	iowrite32(0x20409, 0xBF101234);
-	iowrite32(0, 0xBF101200);
-	iowrite32(0x3F, 0xBF101000);*/
-
 	clockevents_calc_mult_shift(&clockevent, S5L_CLOCK_HZ, 4);
 	clockevent.max_delta_ns = clockevent_delta2ns(0xF0000000, &clockevent);
 	clockevent.min_delta_ns = clockevent_delta2ns(4, &clockevent);
