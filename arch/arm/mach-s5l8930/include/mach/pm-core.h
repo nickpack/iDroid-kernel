@@ -8,10 +8,11 @@
  * published by the Free Software Foundation.
  */
 
-#ifndef  _S5L8930_TIMEX_
-#define  _S5L8930_TIMEX_
+#ifndef  _S5L8930_REGS_PM_CORE_
+#define  _S5L8930_REGS_PM_CORE_
 
-#define CLOCK_TICK_RATE		24000000
-//#define ARCH_HAS_READ_CURRENT_TIMER
+static inline void s3c_pm_arch_prepare_irqs(void) {};
+static inline void s3c_pm_arch_stop_clocks(void) {};
+static inline void s3c_pm_arch_show_resume_irqs(void) {};
 
-#endif //_S5L8930_TIMEX_
+#endif //_S5L8930_REGS_PM_CORE_

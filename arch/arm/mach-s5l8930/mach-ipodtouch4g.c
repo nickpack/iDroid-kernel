@@ -3,6 +3,7 @@
 #include <mach/time.h>
 #include <asm/mach-types.h>
 #include <linux/platform_device.h>
+#include <plat/cpu.h>
 
 static struct platform_device fbdev = {
 	.name = "s5l8920_fb",

@@ -8,8 +8,8 @@
  * published by the Free Software Foundation.
  */
 
-#ifndef  _S5L8930_TIMEX_
-#define  _S5L8930_TIMEX_
+#ifndef  _S5L8930_SYSTEM_
+#define  _S5L8930_SYSTEM_
 
 #include <linux/io.h>
 #include <mach/hardware.h>
@@ -29,4 +29,4 @@ static inline void arch_reset(char mode, const char* cmd)
 	// TODO: Implement PMGR.
 }
 
-#endif //_S5L8930_TIMEX_
+#endif //_S5L8930_SYSTEM_

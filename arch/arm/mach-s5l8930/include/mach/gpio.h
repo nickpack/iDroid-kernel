@@ -11,33 +11,18 @@
 #ifndef  _S5L8930_GPIO_
 #define  _S5L8930_GPIO_
 
-#include <linux/interrupt.h>
-#include <mach/hardware.h>
+#define gpio_get_value	__gpio_get_value
+#define gpio_set_value	__gpio_set_value
+#define gpio_cansleep	__gpio_cansleep
+#define gpio_to_irq	__gpio_to_irq
+
+#define S5L8930_GPIO(x)	(((((x) >> 8) & 0xFF)*8) + ((x) & 0xF))
+#define S3C_GPIO_END	175
+#define ARCH_NR_GPIOS	(S3C_GPIO_END+1)
+
+static inline int irq_to_gpio(int x) { return 0xFFFFFFFF; }
+
 #include <asm-generic/gpio.h>
-
-static inline int gpio_to_irq(unsigned gpio)
-{
-	return gpio;
-}
-
-static inline int irq_to_gpio(unsigned irq)
-{
-	return irq;
-}
-
-static inline int gpio_get_value(unsigned gpio)
-{
-	return 0;
-}
-
-static inline void gpio_set_value(unsigned gpio, int value)
-{
-}
-
-static inline int gpio_cansleep(unsigned gpio)
-{
-	return 0;
-}
 
 #endif //_S5L8930_GPIO_
 

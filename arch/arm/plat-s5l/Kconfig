@@ -7,9 +7,17 @@ comment "Machine Types"
 
 config PLAT_S5L
 	bool
+	select PLAT_SAMSUNG
 	select ARM_VIC
 	select NO_IOPORT
 	select ARCH_REQUIRE_GPIOLIB
+	select S3C_GPIO_TRACK
+	select S3C_GPIO_CFG_S3C64XX
+	select S3C_GPIO_PULL_UPDOWN
+	select S3C_GPIO_CFG_S3C24XX
+	select SAMSUNG_CLKSRC
+	select SAMSUNG_IRQ_VIC_TIMER
+	select SAMSUNG_IRQ_UART
 	select GENERIC_CLOCKEVENTS
 	help
 	  Base platform code for Samsung's S5L series SoC.

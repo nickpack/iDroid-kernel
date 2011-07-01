@@ -8,10 +8,10 @@
  * published by the Free Software Foundation.
  */
 
-#ifndef  _S5L8930_TIMEX_
-#define  _S5L8930_TIMEX_
+#ifndef  _S5L8930_REGS_IRQ_
+#define  _S5L8930_REGS_IRQ_
 
-#define CLOCK_TICK_RATE		24000000
-//#define ARCH_HAS_READ_CURRENT_TIMER
+#include <mach/map.h>
+#include <asm/hardware/vic.h>
 
-#endif //_S5L8930_TIMEX_
+#endif //_S5L8930_REGS_IRQ_
