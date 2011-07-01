@@ -13,6 +13,7 @@ static void s5l8930_timer_set_mode(enum clock_event_mode mode,
 static int s5l8930_timer_set_next_event(unsigned long cycles,
 				    struct clock_event_device *evt)
 {
+	printk("%s: %d\n", __func__, cycles);
 	writel(cycles, S5L_TIMER0_VAL);
 	writel(S5L_TIMER_ENABLE, S5L_TIMER0_CTRL);
 	return 0;
@@ -22,23 +23,35 @@ static irqreturn_t s5l8930_timer_interrupt(int irq, void* dev_id)
 {
 	struct clock_event_device *evt = dev_id;
 
+	printk("%s\n", __func__);
+
 	writel(S5L_TIMER_DISABLE, S5L_TIMER0_CTRL);
 	evt->event_handler(evt);
 
 	return IRQ_HANDLED;
 }
 
+int read_current_timer(unsigned long *timer_val)
+{
+	*timer_val = __raw_readl(S5L_CLOCK_LO);
+	return 0;
+}
+
 static cycle_t s5l8930_clock_read(struct clocksource *cs)
 {
-	register uint32_t hi = readl(S5L_CLOCK_HI);
-	register uint32_t lo = readl(S5L_CLOCK_LO);
-	register uint32_t tst = readl(S5L_CLOCK_HI);
+	printk("%s\n", __func__);
+
+	register uint32_t hi = __raw_readl(S5L_CLOCK_HI);
+	register uint32_t lo = __raw_readl(S5L_CLOCK_LO);
+	register uint32_t tst = __raw_readl(S5L_CLOCK_HI);
 
 	if(hi != tst)
 	{
 		hi = tst;
-		lo = readl(S5L_CLOCK_LO);
+		lo = __raw_readl(S5L_CLOCK_LO);
 	}
+
+	printk("TIME: 0x%08x%08x\n", hi, lo);
 
 	return (((uint64_t)hi) << 32) | lo;
 }
@@ -55,10 +68,9 @@ static struct clock_event_device clockevent =
 static struct clocksource clocksource =
 {
 	.name = "s5l8930-clock",
-	.rating = 200,
+	.rating = 250,
 	.read = s5l8930_clock_read,
 	.mask = CLOCKSOURCE_MASK(64),
-	.shift = 24,
 	.flags = CLOCK_SOURCE_IS_CONTINUOUS,
 };
 
@@ -75,21 +87,24 @@ static void __init s5l8930_timer_init(void)
 
 	printk("s5l8930-timer: initializing\n");
 
-	clockevents_calc_mult_shift(&clockevent, S5L_CLOCK_HZ, 4);
-	clockevent.max_delta_ns = clockevent_delta2ns(0xF0000000, &clockevent);
-	clockevent.min_delta_ns = clockevent_delta2ns(4, &clockevent);
-	clockevent.cpumask = cpumask_of(0);
-
-	clocksource.mult = clocksource_hz2mult(S5L_CLOCK_HZ, clocksource.shift);
-
-	res = clocksource_register(&clocksource);
+	// clocksource
+	
+	res = clocksource_register_hz(&clocksource, S5L_CLOCK_HZ);
 	if(res)
 	{
 		printk("s5l8930-timer: failed to register clock source\n");
 		return;
 	}
 
-	res = setup_irq(IRQ_TIMER0, &s5l8930_timer_irq);
+	// event
+
+	clockevents_calc_mult_shift(&clockevent, S5L_CLOCK_HZ, 4);
+	clockevent.max_delta_ns = clockevent_delta2ns(0xF0000000, &clockevent);
+	clockevent.min_delta_ns = clockevent_delta2ns(1, &clockevent);
+	clockevent.cpumask = cpumask_of(0);
+
+	writel(S5L_TIMER_DISABLE, S5L_TIMER0_CTRL);
+	res = setup_irq(S5L_TIMER0_IRQ, &s5l8930_timer_irq);
 	if(res)
 	{
 		printk("s5l8930-timer: failed to setup irq\n");

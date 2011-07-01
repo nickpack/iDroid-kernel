@@ -1,10 +1,32 @@
+/**
+ * Copyright (c) 2011 Richard Ian Taylor.
+ *
+ * This file is part of the iDroid Project. (http://www.idroidproject.org).
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
 #include <linux/init.h>
+#include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/serial_core.h>
+
 #include <mach/cpu.h>
 #include <mach/map.h>
 #include <asm/mach/map.h>
 #include <plat/irq.h>
 #include <asm/page.h>
+
+#include <asm/mach/arch.h>
+#include <plat/cpu.h>
+#include <plat/clock.h>
+#include <plat/devs.h>
+#include <plat/cpu.h>
+#include <plat/iic.h>
+#include <plat/regs-serial.h>
+#include <plat/irq-vic-timer.h>
 
 static struct map_desc s5l8930_iodesc[] __initdata = {
 	{
@@ -32,9 +54,21 @@ static struct map_desc s5l8930_iodesc[] __initdata = {
 		.type		= MT_DEVICE,
 	},
 	{
-		.virtual	= (unsigned long)VA_GPIO,
-		.pfn		= __phys_to_pfn(PA_GPIO),
-		.length		= SZ_GPIO,
+		.virtual	= (unsigned long)VA_UART0,
+		.pfn		= __phys_to_pfn(PA_UART0),
+		.length		= SZ_UART,
+		.type		= MT_DEVICE,
+	},
+	{
+		.virtual	= (unsigned long)VA_UART1,
+		.pfn		= __phys_to_pfn(PA_UART1),
+		.length		= SZ_UART,
+		.type		= MT_DEVICE,
+	},
+	{
+		.virtual	= (unsigned long)VA_UART2,
+		.pfn		= __phys_to_pfn(PA_UART2),
+		.length		= SZ_UART,
 		.type		= MT_DEVICE,
 	},
 	{
@@ -80,306 +114,103 @@ static struct map_desc s5l8930_iodesc[] __initdata = {
 		.type		= MT_DEVICE,
 	},
 	{
-		.virtual	= (unsigned long)VA_DEBUG,
-		.pfn		= __phys_to_pfn(PA_DEBUG),
-		.length		= SZ_DEBUG,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_CDMA,
-		.pfn		= __phys_to_pfn(PA_CDMA),
-		.length		= SZ_CDMA,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_CDMA_AES,
-		.pfn		= __phys_to_pfn(PA_CDMA_AES),
-		.length		= SZ_CDMA_AES,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_DART1,
-		.pfn		= __phys_to_pfn(PA_DART1),
-		.length		= SZ_DART1,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_DART2,
-		.pfn		= __phys_to_pfn(PA_DART2),
-		.length		= SZ_DART2,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_SDIO,
-		.pfn		= __phys_to_pfn(PA_SDIO),
-		.length		= SZ_SDIO,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_SHA,
-		.pfn		= __phys_to_pfn(PA_SHA),
-		.length		= SZ_SHA,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_CEATA,
-		.pfn		= __phys_to_pfn(PA_CEATA),
-		.length		= SZ_CEATA,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_FMI0,
-		.pfn		= __phys_to_pfn(PA_FMI0),
-		.length		= SZ_FMI0,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_FMI1,
-		.pfn		= __phys_to_pfn(PA_FMI1),
-		.length		= SZ_FMI1,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_FMI2,
-		.pfn		= __phys_to_pfn(PA_FMI2),
-		.length		= SZ_FMI2,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_FMI3,
-		.pfn		= __phys_to_pfn(PA_FMI3),
-		.length		= SZ_FMI3,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_FMI4,
-		.pfn		= __phys_to_pfn(PA_FMI4),
-		.length		= SZ_FMI4,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_FMI5,
-		.pfn		= __phys_to_pfn(PA_FMI5),
-		.length		= SZ_FMI5,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_SPI0,
-		.pfn		= __phys_to_pfn(PA_SPI0),
-		.length		= SZ_SPI0,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_SPI1,
-		.pfn		= __phys_to_pfn(PA_SPI1),
-		.length		= SZ_SPI1,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_UART0,
-		.pfn		= __phys_to_pfn(PA_UART0),
-		.length		= SZ_UART,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_UART1,
-		.pfn		= __phys_to_pfn(PA_UART1),
-		.length		= SZ_UART,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_UART2,
-		.pfn		= __phys_to_pfn(PA_UART2),
-		.length		= SZ_UART,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_PKE,
-		.pfn		= __phys_to_pfn(PA_PKE),
-		.length		= SZ_PKE,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_I2C0,
-		.pfn		= __phys_to_pfn(PA_I2C0),
-		.length		= SZ_I2C,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_I2C1,
-		.pfn		= __phys_to_pfn(PA_I2C1),
-		.length		= SZ_I2C,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_PWM,
-		.pfn		= __phys_to_pfn(PA_PWM),
-		.length		= SZ_PWM,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_I2S0,
-		.pfn		= __phys_to_pfn(PA_I2S0),
-		.length		= SZ_I2S0,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_USB_PHY,
-		.pfn		= __phys_to_pfn(PA_USB_PHY),
+		.virtual	= (unsigned long)S3C_VA_USB_HSPHY,
+		.pfn		= __phys_to_pfn(S3C_PA_USB_HSPHY),
 		.length		= SZ_USB_PHY,
 		.type		= MT_DEVICE,
 	},
 	{
-		.virtual	= (unsigned long)VA_USB,
-		.pfn		= __phys_to_pfn(PA_USB),
-		.length		= SZ_USB,
+		.virtual	= (unsigned long)S3C_VA_TIMER,
+		.pfn		= __phys_to_pfn(PA_PWM),
+		.length		= SZ_PWM,
 		.type		= MT_DEVICE,
 	},
+};
+
+static __init void s5l8930_cpu_map_io(void)
+{
+	printk("%s\n", __func__);
+	iotable_init(s5l8930_iodesc, ARRAY_SIZE(s5l8930_iodesc));
+	printk("%s done\n", __func__);
+}
+
+static __init int s5l8930_cpu_init(void)
+{
+	return 0;
+}
+
+static __init void s5l8930_cpu_init_clocks(int _xtal)
+{
+	s3c24xx_register_baseclocks(_xtal);
+}
+
+extern struct s3c24xx_uart_resources s5l_uart_resources[] __initdata;
+static __init void s5l8930_cpu_init_uarts(struct s3c2410_uartcfg *cfg, int no)
+{
+	s3c24xx_init_uartdevs("s3c6400-uart", s5l_uart_resources, cfg, no);
+}
+
+static struct cpu_table cpu_id[] __initdata = {
 	{
-		.virtual	= (unsigned long)VA_USB_EHCI,
-		.pfn		= __phys_to_pfn(PA_USB_EHCI),
-		.length		= SZ_USB_EHCI,
-		.type		= MT_DEVICE,
+		.idcode			= 0x8930,
+		.idmask			= 0xffff,
+		.map_io			= s5l8930_cpu_map_io,
+		.init			= s5l8930_cpu_init,
+		.init_clocks	= s5l8930_cpu_init_clocks,
+		.init_uarts		= s5l8930_cpu_init_uarts,
+		.name			= "S5L8930",
 	},
-	{
-		.virtual	= (unsigned long)VA_USB_OHCI0,
-		.pfn		= __phys_to_pfn(PA_USB_OHCI0),
-		.length		= SZ_USB_OHCI0,
-		.type		= MT_DEVICE,
+};
+
+#define S5L8930_UCON_DEFAULT	(S3C2410_UCON_TXILEVEL |	\
+				 S3C2410_UCON_RXILEVEL |	\
+				 S3C2410_UCON_TXIRQMODE |	\
+				 S3C2410_UCON_RXIRQMODE |	\
+				 S3C2410_UCON_RXFIFO_TOI |	\
+				 S3C2443_UCON_RXERR_IRQEN)
+
+#define S5L8930_ULCON_DEFAULT	S3C2410_LCON_CS8
+
+#define S5L8930_UFCON_DEFAULT	(S3C2410_UFCON_FIFOMODE |	\
+				 S3C2440_UFCON_RXTRIG8 |	\
+				 S3C2440_UFCON_TXTRIG16)
+
+static struct s3c2410_uartcfg s5l8930_uartcfgs[] __initdata = {
+	[0] = {
+		.hwport	     = 0,
+		.flags	     = 0,
+		.ucon	     = S5L8930_UCON_DEFAULT,
+		.ulcon	     = S5L8930_ULCON_DEFAULT,
+		.ufcon	     = S5L8930_UFCON_DEFAULT,
 	},
-	{
-		.virtual	= (unsigned long)VA_USB_OHCI1,
-		.pfn		= __phys_to_pfn(PA_USB_OHCI1),
-		.length		= SZ_USB_OHCI1,
-		.type		= MT_DEVICE,
+	[1] = {
+		.hwport	     = 1,
+		.flags	     = 0,
+		.ucon	     = S5L8930_UCON_DEFAULT,
+		.ulcon	     = S5L8930_ULCON_DEFAULT,
+		.ufcon	     = S5L8930_UFCON_DEFAULT,
 	},
-	{
-		.virtual	= (unsigned long)VA_IOP0,
-		.pfn		= __phys_to_pfn(PA_IOP0),
-		.length		= SZ_IOP0,
-		.type		= MT_DEVICE,
+	[2] = {
+		.hwport	     = 2,
+		.flags	     = 0,
+		.ucon	     = S5L8930_UCON_DEFAULT,
+		.ulcon	     = S5L8930_ULCON_DEFAULT,
+		.ufcon	     = S5L8930_UFCON_DEFAULT,
 	},
-	{
-		.virtual	= (unsigned long)VA_IOP1,
-		.pfn		= __phys_to_pfn(PA_IOP1),
-		.length		= SZ_IOP1,
-		.type		= MT_DEVICE,
-	},
-	/*{
-		.virtual	= (unsigned long)VA_VXD,
-		.pfn		= __phys_to_pfn(PA_VXD),
-		.length		= SZ_VXD,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_SGX,
-		.pfn		= __phys_to_pfn(PA_SGX),
-		.length		= SZ_SGX,
-		.type		= MT_DEVICE,
-	},*/
-	{
-		.virtual	= (unsigned long)VA_VENC,
-		.pfn		= __phys_to_pfn(PA_VENC),
-		.length		= SZ_VENC,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_JPEG,
-		.pfn		= __phys_to_pfn(PA_JPEG),
-		.length		= SZ_JPEG,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_ISP0,
-		.pfn		= __phys_to_pfn(PA_ISP0),
-		.length		= SZ_ISP0,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_ISP1,
-		.pfn		= __phys_to_pfn(PA_ISP1),
-		.length		= SZ_ISP1,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_SCALER,
-		.pfn		= __phys_to_pfn(PA_SCALER),
-		.length		= SZ_SCALER,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_CLCD0,
-		.pfn		= __phys_to_pfn(PA_CLCD0),
-		.length		= SZ_CLCD0,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_CLCD1,
-		.pfn		= __phys_to_pfn(PA_CLCD1),
-		.length		= SZ_CLCD1,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_MIPI_DSIM,
-		.pfn		= __phys_to_pfn(PA_MIPI_DSIM),
-		.length		= SZ_MIPI_DSIM,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_SWI,
-		.pfn		= __phys_to_pfn(PA_SWI),
-		.length		= SZ_SWI,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_RGBOUT0,
-		.pfn		= __phys_to_pfn(PA_RGBOUT0),
-		.length		= SZ_RGBOUT0,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_RGBOUT1,
-		.pfn		= __phys_to_pfn(PA_RGBOUT1),
-		.length		= SZ_RGBOUT1,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_TVOUT,
-		.pfn		= __phys_to_pfn(PA_TVOUT),
-		.length		= SZ_TVOUT,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_AMC0,
-		.pfn		= __phys_to_pfn(PA_AMC0),
-		.length		= SZ_AMC0,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_AMC1,
-		.pfn		= __phys_to_pfn(PA_AMC1),
-		.length		= SZ_AMC1,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_AMC2,
-		.pfn		= __phys_to_pfn(PA_AMC2),
-		.length		= SZ_AMC2,
-		.type		= MT_DEVICE,
-	},
-	{
-		.virtual	= (unsigned long)VA_DISPLAYPORT,
-		.pfn		= __phys_to_pfn(PA_DISPLAYPORT),
-		.length		= SZ_DISPLAYPORT,
-		.type		= MT_DEVICE,
+	[3] = {
+		.hwport	     = 3,
+		.flags	     = 0,
+		.ucon	     = S5L8930_UCON_DEFAULT,
+		.ulcon	     = S5L8930_ULCON_DEFAULT,
+		.ufcon	     = S5L8930_UFCON_DEFAULT,
 	},
 };
 
 void __init s5l8930_map_io(void)
 {
-	printk("%s\n", __func__);
-	iotable_init(s5l8930_iodesc, ARRAY_SIZE(s5l8930_iodesc));
-	printk("%s done\n", __func__);
+	s3c_init_cpu(0x8930, cpu_id, ARRAY_SIZE(cpu_id));
+	s3c24xx_init_clocks(12000000);
+	s3c24xx_init_uarts(s5l8930_uartcfgs, ARRAY_SIZE(s5l8930_uartcfgs));
 }
 
 static void __iomem *s5l8930_vics[] = {
@@ -393,10 +224,29 @@ void __init s5l8930_init_irq(void)
 {
 	printk("%s\n", __func__);
 	s5l_init_vics(s5l8930_vics, ARRAY_SIZE(s5l8930_vics));
+
+	s3c_init_vic_timer_irq(IRQ_TIMER, IRQ_TIMER0);
 	printk("%s done\n", __func__);
+}
+
+static struct platform_device *s5l8930_devices[] __initdata = {
+	&s3c_device_i2c0,
+	&s3c_device_i2c1,
+	//&s3c_device_usb_hsotg,
+};
+
+void s3c_i2c0_cfg_gpio(struct platform_device *dev)
+{
+}
+
+void s3c_i2c1_cfg_gpio(struct platform_device *dev)
+{
 }
 
 void __init s5l8930_init(void)
 {
 	printk("%s\n", __func__);
+	s3c_i2c0_set_platdata(NULL);
+	s3c_i2c1_set_platdata(NULL);
+	platform_add_devices(s5l8930_devices, ARRAY_SIZE(s5l8930_devices));
 }

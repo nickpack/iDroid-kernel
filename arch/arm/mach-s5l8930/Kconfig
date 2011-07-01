@@ -8,6 +8,11 @@ config CPU_S5L8930
 	select PLAT_S5L
 	select S5L_IRQ
 	select CPU_V7
+	select SERIAL_SAMSUNG
+	select SERIAL_S3C6400
+	select S3C_DEV_I2C1
+	select S3C_DEV_USB_HSOTG
+	select USB_GADGET_S3C_HSOTG
 	help
 	  Enable S5L8930 CPU support
 

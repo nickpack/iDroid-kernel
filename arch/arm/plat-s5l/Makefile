@@ -3,7 +3,7 @@
 #	This file is part of the iDroid Project 
 #	(http://www.idroidproject.org/).
 
-obj-y					:=
+obj-y					:= dev-uart.o
 obj-m					:=
 obj-n					:=
 obj-					:=
