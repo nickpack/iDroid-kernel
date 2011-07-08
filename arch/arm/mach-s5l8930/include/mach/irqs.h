@@ -15,11 +15,11 @@
 
 #define IRQ_TIMER	0x11
 
-#define IRQ_TIMER0	700
-#define IRQ_TIMER1	701
-#define IRQ_TIMER2	702
-#define IRQ_TIMER3	703
-#define IRQ_TIMER4	704
+#define IRQ_TIMER0	200
+#define IRQ_TIMER1	201
+#define IRQ_TIMER2	202
+#define IRQ_TIMER3	203
+#define IRQ_TIMER4	204
 
 #define IRQ_IIC		0x13
 #define IRQ_IIC1	0x14
@@ -32,7 +32,7 @@
 #define IRQ_UART2	0x18
 #define IRQ_UART3	0x19
 
-#define NR_IRQS		(32*4)
+#define NR_IRQS		(32*4) + 128 // 128 not from VICs
 
 #define IRQ_EINT(x)			(x)
 #define EINT_OFFSET(irq)	(irq)

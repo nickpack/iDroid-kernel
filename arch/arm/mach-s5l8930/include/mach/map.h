@@ -101,12 +101,12 @@
 #define VA_UART1		VA_UART(1)
 #define PA_UART2		PA_UART(2)
 #define VA_UART2		VA_UART(2)
-#define PA_UART3		PA_UART(2)
-#define VA_UART3		VA_UART(2)
-#define PA_UART4		PA_UART(2)
-#define VA_UART4		VA_UART(2)
-#define PA_UART5		PA_UART(2)
-#define VA_UART5		VA_UART(2)
+#define PA_UART3		PA_UART(3)
+#define VA_UART3		VA_UART(3)
+#define PA_UART4		PA_UART(4)
+#define VA_UART4		VA_UART(4)
+#define PA_UART5		PA_UART(5)
+#define VA_UART5		VA_UART(5)
 
 #define PA_PKE			0x83100000
 #define SZ_PKE			0x1000
