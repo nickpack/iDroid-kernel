@@ -25,8 +25,8 @@
 #define S5L_TIMER1_VAL	(VA_PMGR0 + 0x200c)
 #define S5L_TIMER1_CTRL	(VA_PMGR0 + 0x2014)
 
-#define S5L_TIMER_ENABLE	1
-#define S5L_TIMER_DISABLE	2
+#define S5L_TIMER_IRQ_ENABLE	(1 << 0)
+#define S5L_TIMER_EXPIRED		(1 << 1)
 
 struct sys_timer;
 extern struct sys_timer s5l8930_timer;

@@ -7,33 +7,44 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
-#include <mach/hardware.h>
+#include <asm/hardware/vic.h>
 #include <mach/map.h>
+#include <plat/irqs.h>
 
-		.macro	disable_fiq
-		.endm
+	.macro	disable_fiq
+	.endm
 
-		.macro  get_irqnr_preamble, base, tmp
-		.endm
+	.macro  get_irqnr_preamble, base, tmp
+	ldr	\base, =VA_VIC0
+	.endm
 
-		.macro  arch_ret_to_user, tmp1, tmp2
-		.endm
+	.macro  arch_ret_to_user, tmp1, tmp2
+	.endm
 
-		.macro	get_irqnr_and_base, irqnr, irqstat, base, tmp
-		ldr	\base, =VA_VIC0
-		ldr	\irqstat, [\base, #0]           @ get masked status
-		cmp	\irqstat, #0
-		addeq	\base, \base, #0x10000
-		ldreq	\irqstat, [\base, #0]           @ get masked status
-		cmpeq	\irqstat, #0
-		addeq	\base, \base, #0x10000
-		ldreq	\irqstat, [\base, #0]           @ get masked status
-		cmpeq	\irqstat, #0
-		addeq	\base, \base, #0x10000
-		ldreq	\irqstat, [\base, #0]           @ get masked status
-		cmpeq	\irqstat, #0
-		ldr	\irqnr, [\base, #0xF00]         @ read for VICADDR[01]
-		.endm
+	.macro	get_irqnr_and_base, irqnr, irqstat, base, tmp
+	@ check the vic0
+	mov	\irqnr, #31
+	ldr	\irqstat, [ \base, # VIC_IRQ_STATUS ]
+	teq	\irqstat, #0
 
-		.macro irq_prio_table
-		.endm
+	@ otherwise try vic1
+	addeq	\tmp, \base, #(VA_VIC1 - VA_VIC0)
+	addeq	\irqnr, \irqnr, #32
+	ldreq	\irqstat, [ \tmp, # VIC_IRQ_STATUS ]
+	teqeq	\irqstat, #0
+
+	@ otherwise try vic2
+	addeq	\tmp, \base, #(VA_VIC2 - VA_VIC1)
+	addeq	\irqnr, \irqnr, #32
+	ldreq	\irqstat, [ \tmp, # VIC_IRQ_STATUS ]
+	teqeq	\irqstat, #0
+
+	@ otherwise try vic3
+	addeq	\tmp, \base, #(VA_VIC3 - VA_VIC2)
+	addeq	\irqnr, \irqnr, #32
+	ldreq	\irqstat, [ \tmp, # VIC_IRQ_STATUS ]
+	teqeq	\irqstat, #0
+
+	clzne	\irqstat, \irqstat
+	subne	\irqnr, \irqnr, \irqstat
+	.endm

@@ -5,6 +5,22 @@
 #include <mach/time.h>
 #include <asm/mach/time.h>
 
+static void timer_disable()
+{
+	//printk("%s\n", __func__);
+	writel(2, S5L_TIMER0_CTRL);
+	writel(0, S5L_TIMER0_CTRL);
+}
+
+static void timer_setup(unsigned long cyc)
+{
+	//printk("%s: %d.\n", __func__, cyc);
+	writel(0xFFFFFFFF, S5L_TIMER0_VAL);
+	writel(3, S5L_TIMER0_CTRL);
+	writel(1, S5L_TIMER0_CTRL);
+	writel(cyc, S5L_TIMER0_VAL);
+}
+
 static void s5l8930_timer_set_mode(enum clock_event_mode mode,
 			      struct clock_event_device *evt)
 {
@@ -13,9 +29,7 @@ static void s5l8930_timer_set_mode(enum clock_event_mode mode,
 static int s5l8930_timer_set_next_event(unsigned long cycles,
 				    struct clock_event_device *evt)
 {
-	printk("%s: %d\n", __func__, cycles);
-	writel(cycles, S5L_TIMER0_VAL);
-	writel(S5L_TIMER_ENABLE, S5L_TIMER0_CTRL);
+	timer_setup(cycles);
 	return 0;
 }
 
@@ -23,24 +37,13 @@ static irqreturn_t s5l8930_timer_interrupt(int irq, void* dev_id)
 {
 	struct clock_event_device *evt = dev_id;
 
-	printk("%s\n", __func__);
-
-	writel(S5L_TIMER_DISABLE, S5L_TIMER0_CTRL);
+	timer_disable();
 	evt->event_handler(evt);
-
 	return IRQ_HANDLED;
-}
-
-int read_current_timer(unsigned long *timer_val)
-{
-	*timer_val = __raw_readl(S5L_CLOCK_LO);
-	return 0;
 }
 
 static cycle_t s5l8930_clock_read(struct clocksource *cs)
 {
-	printk("%s\n", __func__);
-
 	register uint32_t hi = __raw_readl(S5L_CLOCK_HI);
 	register uint32_t lo = __raw_readl(S5L_CLOCK_LO);
 	register uint32_t tst = __raw_readl(S5L_CLOCK_HI);
@@ -50,8 +53,6 @@ static cycle_t s5l8930_clock_read(struct clocksource *cs)
 		hi = tst;
 		lo = __raw_readl(S5L_CLOCK_LO);
 	}
-
-	printk("TIME: 0x%08x%08x\n", hi, lo);
 
 	return (((uint64_t)hi) << 32) | lo;
 }
@@ -103,7 +104,7 @@ static void __init s5l8930_timer_init(void)
 	clockevent.min_delta_ns = clockevent_delta2ns(1, &clockevent);
 	clockevent.cpumask = cpumask_of(0);
 
-	writel(S5L_TIMER_DISABLE, S5L_TIMER0_CTRL);
+	timer_disable();
 	res = setup_irq(S5L_TIMER0_IRQ, &s5l8930_timer_irq);
 	if(res)
 	{
