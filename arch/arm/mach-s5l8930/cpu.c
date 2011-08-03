@@ -139,11 +139,7 @@ static __init int s5l8930_cpu_init(void)
 	return 0;
 }
 
-static __init void s5l8930_cpu_init_clocks(int _xtal)
-{
-	s3c24xx_register_baseclocks(_xtal);
-}
-
+extern __init void s5l8930_cpu_init_clocks(int _xtal);
 extern struct s3c24xx_uart_resources s5l_uart_resources[] __initdata;
 static __init void s5l8930_cpu_init_uarts(struct s3c2410_uartcfg *cfg, int no)
 {
@@ -209,7 +205,7 @@ static struct s3c2410_uartcfg s5l8930_uartcfgs[] __initdata = {
 void __init s5l8930_map_io(void)
 {
 	s3c_init_cpu(0x8930, cpu_id, ARRAY_SIZE(cpu_id));
-	s3c24xx_init_clocks(12000000);
+	s3c24xx_init_clocks(24000000);
 	s3c24xx_init_uarts(s5l8930_uartcfgs, ARRAY_SIZE(s5l8930_uartcfgs));
 }
 
@@ -224,7 +220,6 @@ void __init s5l8930_init_irq(void)
 {
 	printk("%s\n", __func__);
 	s5l_init_vics(s5l8930_vics, ARRAY_SIZE(s5l8930_vics));
-
 	s3c_init_vic_timer_irq(IRQ_TIMER, IRQ_TIMER0);
 	printk("%s done\n", __func__);
 }
