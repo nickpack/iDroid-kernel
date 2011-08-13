@@ -527,13 +527,21 @@ config SERIAL_S3C24A0
 	  Serial port support for the Samsung S3C24A0 SoC
 
 config SERIAL_S3C6400
-	tristate "Samsung S3C6400/S3C6410/S5P6440/S5P6450/S5PC100/S5L Serial port support"
-	depends on SERIAL_SAMSUNG && (CPU_S3C6400 || CPU_S3C6410 || CPU_S5P6440 || CPU_S5P6450 || CPU_S5PC100 || ARCH_S5L)
+	tristate "Samsung S3C6400/S3C6410/S5P6440/S5P6450/S5PC100 Serial port support"
+	depends on SERIAL_SAMSUNG && (CPU_S3C6400 || CPU_S3C6410 || CPU_S5P6440 || CPU_S5P6450 || CPU_S5PC100)
 	select SERIAL_SAMSUNG_UARTS_4
 	default y
 	help
 	  Serial port support for the Samsung S3C6400, S3C6410, S5P6440, S5P6450
 	  and S5PC100 SoCs
+
+config SERIAL_S5L8900
+	tristate "Samsung S5L Serial port support"
+	depends on SERIAL_SAMSUNG && ARCH_S5L
+	select SERIAL_SAMSUNG_UARTS_4
+	default y
+	help
+	  Serial port support for the Samsung S5L89XX SoCs
 
 config SERIAL_S5PV210
 	tristate "Samsung S5PV210 Serial port support"

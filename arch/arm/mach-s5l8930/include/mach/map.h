@@ -28,6 +28,7 @@
 
 #define PA_GPIO			0xBFA00000
 #define SZ_GPIO			0x1000
+#define VA_GPIO			(S3C_ADDR_CPU(0x800000))
 
 #define VA_PMGR(x)		(S3C_ADDR_CPU(0x100000*x))
 #define PA_PMGR0		0xBF100000

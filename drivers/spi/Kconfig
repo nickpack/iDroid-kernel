@@ -336,6 +336,13 @@ config SPI_S3C64XX
 	help
 	  SPI driver for Samsung S3C64XX and newer SoCs.
 
+config SPI_S5L
+	tristate "Samsung S5L SPI"
+	depends on ARCH_S5L
+	select SPI_BITBANG
+	help
+	  SPI driver for Samsung S5L ARM SoCs
+
 config SPI_SH_MSIOF
 	tristate "SuperH MSIOF SPI controller"
 	depends on SUPERH && HAVE_CLK

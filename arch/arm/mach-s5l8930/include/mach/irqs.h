@@ -15,11 +15,11 @@
 
 #define IRQ_TIMER	0x11
 
-#define IRQ_TIMER0	200
-#define IRQ_TIMER1	201
-#define IRQ_TIMER2	202
-#define IRQ_TIMER3	203
-#define IRQ_TIMER4	204
+#define IRQ_TIMER0	300
+#define IRQ_TIMER1	301
+#define IRQ_TIMER2	302
+#define IRQ_TIMER3	303
+#define IRQ_TIMER4	304
 
 #define IRQ_IIC		0x13
 #define IRQ_IIC1	0x14
@@ -27,15 +27,23 @@
 
 #define IRQ_OTG		0xD
 
+#define IRQ_GPIO	0x74
+
 #define IRQ_UART0	0x16
 #define IRQ_UART1	0x17
 #define IRQ_UART2	0x18
 #define IRQ_UART3	0x19
 
-#define NR_IRQS		(32*4) + 128 // 128 not from VICs
+#define IRQ_SPI0 0x1D
+#define IRQ_SPI1 0x1E
 
-#define IRQ_EINT(x)			(x)
-#define EINT_OFFSET(irq)	(irq)
-#define IRQ_EINT_BIT(x)		EINT_OFFSET(x)
+#define S5L_SUBIRQ_START	(32*4) + 176
+#define S5L_SUBIRQ(x)		(S5L_SUBIRQ_START + (x))
+
+#define NR_IRQS				S5L_SUBIRQ_START + 100 // 100 'spare' IRQs for software demuxing
+
+#define IRQ_EINT(x)			((32*4) + (x))
+#define EINT_OFFSET(irq)	((irq)/32)
+#define IRQ_EINT_BIT(x)		((x)&0x1f)
 
 #endif //_S5L8930_IRQS_

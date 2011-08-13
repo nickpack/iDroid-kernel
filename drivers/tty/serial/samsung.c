@@ -526,6 +526,11 @@ static int s3c24xx_serial_calcbaud(struct baud_calc *calc,
 		return 0;
 
 	rate = clk_get_rate(calc->src);
+	dbg("%s: %s @ %d.\n", __func__, clksrc->name, rate);
+
+	if(!rate)
+		return 0;
+
 	rate /= clksrc->divisor;
 
 	calc->clksrc = clksrc;
@@ -1366,8 +1371,7 @@ s3c24xx_serial_get_options(struct uart_port *port, int *baud,
 		else
 			rate = 1;
 
-
-		*baud = rate / (16 * (ubrdiv + 1));
+		*baud = rate / (16 * ((ubrdiv & 0xFFFF) + 1));
 		dbg("calculated baud %d\n", *baud);
 	}
 

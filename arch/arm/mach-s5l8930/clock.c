@@ -37,6 +37,11 @@
 
 // PLLs
 
+static int s5l_clock_always_on(struct clk *_clk, int _enable)
+{
+	return 0;
+}
+
 struct s5l_pll
 {
 	struct clk clk;
@@ -94,6 +99,7 @@ static struct s5l_pll s5l_plls[] = {
 			.name = "apll",
 			.id = -1,
 			.ops = &s5l_pll_clk_ops,
+			.enable = s5l_clock_always_on,
 		},
 
 		.con0 = S5L_APLL_CON0,
@@ -104,6 +110,7 @@ static struct s5l_pll s5l_plls[] = {
 			.name = "mpll",
 			.id = -1,
 			.ops = &s5l_pll_clk_ops,
+			.enable = s5l_clock_always_on,
 		},
 
 		.con0 = S5L_MPLL_CON0,
@@ -114,6 +121,7 @@ static struct s5l_pll s5l_plls[] = {
 			.name = "epll",
 			.id = -1,
 			.ops = &s5l_pll_clk_ops,
+			.enable = s5l_clock_always_on,
 		},
 
 		.con0 = S5L_EPLL_CON0,
@@ -124,6 +132,7 @@ static struct s5l_pll s5l_plls[] = {
 			.name = "vpll",
 			.id = -1,
 			.ops = &s5l_pll_clk_ops,
+			.enable = s5l_clock_always_on,
 		},
 
 		.con0 = S5L_VPLL_CON0,
@@ -133,15 +142,12 @@ static struct s5l_pll s5l_plls[] = {
 
 // Clock sources
 
-static int s5l_clock_always_on(struct clk *_clk, int _enable)
-{
-	return 0;
-}
-
 static void s5l_clock_gate_toggle_idx(int _idx, int _enable)
 {
 	uint32_t __iomem *reg = &S5L_CLOCK_GATE[_idx];
 	BUG_ON(_idx >= 64);
+
+	printk("%s: 0x%p 0x%x %d\n", __func__, reg, _idx, _enable);
 
 	if(_enable)
 		writel(readl(reg) | 0xF, reg);
@@ -149,6 +155,7 @@ static void s5l_clock_gate_toggle_idx(int _idx, int _enable)
 		writel(readl(reg) &~ 0xF, reg);
 
 	while((readl(reg) & 0xF) != ((readl(reg) >> 4) & 0xF));
+	printk("%s: %d %d done\n", __func__, _idx, _enable);
 }
 
 static int s5l_clock_gate_toggle(struct clk *_clk, int _enable)
@@ -205,7 +212,8 @@ static void s5l_power_zone_toggle(struct s5l_power_zone *_z, int _enable)
 	else
 	{
 		_z->count--;
-		BUG_ON(_z->count < 0);
+		if(_z->count < 0)
+			_z->count = 0;
 
 		if(_z->count == 0)
 			s5l_clock_gate_toggle_idx(_z->gate, 0);
@@ -567,8 +575,8 @@ static struct clksrc_clk clk_hperf0 = {
 	.clk = {
 		.name = "hperf0",
 		.id = -1,
-		.enable = s5l_clock_gate_toggle,
-		.ctrlbit = 0x2,
+		.enable = s5l_clock_gate_toggle_zone,
+		.ctrlbit = S5L_MAKE_CLOCKGATE(ZONE_HPERF0, 0),
 	},
 
 	.sources = &clk_periph_sources0,
@@ -579,8 +587,8 @@ static struct clksrc_clk clk_hperf1 = {
 	.clk = {
 		.name = "hperf1",
 		.id = -1,
-		.enable = s5l_clock_gate_toggle,
-		.ctrlbit = 0x5,
+		.enable = s5l_clock_gate_toggle_zone,
+		.ctrlbit = S5L_MAKE_CLOCKGATE(ZONE_HPERF1, 0),
 	},
 
 	.sources = &clk_base_sources,
@@ -604,8 +612,8 @@ static struct clksrc_clk clk_mperf = {
 	.clk = {
 		.name = "mperf",
 		.id = -1,
-		.enable = s5l_clock_gate_toggle,
-		.ctrlbit = 0x15,
+		.enable = s5l_clock_gate_toggle_zone,
+		.ctrlbit = S5L_MAKE_CLOCKGATE(ZONE_MPERF, 0),
 	},
 
 	.sources = &clk_base_sources,
@@ -747,6 +755,8 @@ static struct clksrc_clk clk_clk50 = {
 static struct clk *clk_spi_source_list[] = {
 	&clk_medium0.clk,
 	&clk_medium1.clk,
+	&clk_xtal,
+	&clk_xtal,
 };
 
 static struct clksrc_sources clk_spi_sources = {
@@ -1212,7 +1222,16 @@ static struct clk clk_displayport = {
 	.ctrlbit = S5L_MAKE_CLOCKGATE(ZONE_HPERF2, 0xe),
 };
 
+// Used by UART driver. -- Ricky26
+static struct clk clk_uclk0 = {
+	.name = "uclk0",
+	.id = -1,
+	.rate = 24000000,
+};
+
 static struct clk *clocks_init[] = {
+	&clk_uart0, // Used for debugging
+	&clk_uclk0,
 };
 
 static struct clk *clocks_disable[] = {
@@ -1226,17 +1245,16 @@ static struct clk *clocks_disable[] = {
 	&clk_sdio_wifi,
 	&clk_sdio_ceata,
 	&clk_sha,
-	&clk_fmi0,
-	&clk_fmi0_bch,
-	&clk_fmi1,
-	&clk_fmi1_bch,
-	&clk_uart0,
 	&clk_uart1,
 	&clk_uart2,
 	&clk_uart3,
 	&clk_uart4,
 	&clk_uart5,
 	&clk_uart6,
+	&clk_fmi0,
+	&clk_fmi0_bch,
+	&clk_fmi1,
+	&clk_fmi1_bch,
 	&clk_i2s0,
 	&clk_i2s1,
 	&clk_i2s2,
@@ -1269,12 +1287,16 @@ __init void s5l8930_cpu_init_clocks(int _xtal)
 	int i;
 
 	s3c24xx_register_baseclocks(_xtal);
-	s5l8930_setup_clocks();
+	clk_p.parent = &clk_lperf0;
+
+	// starts at 1 to not disable MPERF
+	for(i = 1; i < ARRAY_SIZE(s5l_power_zones); i++)
+		s5l_power_zone_toggle(&s5l_power_zones[i], 0);
 
 	for(i = 0; i < ARRAY_SIZE(clksrcs); i++)
 	{
 		s3c_register_clksrc(clksrcs[i], 1);
-		(clksrcs[i]->clk.enable)(&clksrcs[i]->clk, 0);
+		(clksrcs[i]->clk.enable)(&clksrcs[i]->clk, 1);
 	}
 
 	s3c24xx_register_clocks(clocks_init, ARRAY_SIZE(clocks_init));

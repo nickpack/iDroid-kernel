@@ -12,6 +12,7 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/serial_core.h>
+#include <linux/platform_device.h>
 
 #include <mach/cpu.h>
 #include <mach/map.h>
@@ -114,6 +115,12 @@ static struct map_desc s5l8930_iodesc[] __initdata = {
 		.type		= MT_DEVICE,
 	},
 	{
+		.virtual	= (unsigned long)VA_GPIO,
+		.pfn		= __phys_to_pfn(PA_GPIO),
+		.length		= SZ_GPIO,
+		.type		= MT_DEVICE,
+	},
+	{
 		.virtual	= (unsigned long)S3C_VA_USB_HSPHY,
 		.pfn		= __phys_to_pfn(S3C_PA_USB_HSPHY),
 		.length		= SZ_USB_PHY,
@@ -143,7 +150,7 @@ extern __init void s5l8930_cpu_init_clocks(int _xtal);
 extern struct s3c24xx_uart_resources s5l_uart_resources[] __initdata;
 static __init void s5l8930_cpu_init_uarts(struct s3c2410_uartcfg *cfg, int no)
 {
-	s3c24xx_init_uartdevs("s3c6400-uart", s5l_uart_resources, cfg, no);
+	s3c24xx_init_uartdevs("s5l8900-uart", s5l_uart_resources, cfg, no);
 }
 
 static struct cpu_table cpu_id[] __initdata = {
@@ -171,6 +178,13 @@ static struct cpu_table cpu_id[] __initdata = {
 				 S3C2440_UFCON_RXTRIG8 |	\
 				 S3C2440_UFCON_TXTRIG16)
 
+static struct s3c24xx_uart_clksrc s5l8930_uart_srcs[] = {
+	[0] = {
+		.name = "uclk0",
+		.divisor = 1,
+	},
+};
+
 static struct s3c2410_uartcfg s5l8930_uartcfgs[] __initdata = {
 	[0] = {
 		.hwport	     = 0,
@@ -178,6 +192,9 @@ static struct s3c2410_uartcfg s5l8930_uartcfgs[] __initdata = {
 		.ucon	     = S5L8930_UCON_DEFAULT,
 		.ulcon	     = S5L8930_ULCON_DEFAULT,
 		.ufcon	     = S5L8930_UFCON_DEFAULT,
+
+		.clocks = s5l8930_uart_srcs,
+		.clocks_size = ARRAY_SIZE(s5l8930_uart_srcs),
 	},
 	[1] = {
 		.hwport	     = 1,
@@ -185,6 +202,9 @@ static struct s3c2410_uartcfg s5l8930_uartcfgs[] __initdata = {
 		.ucon	     = S5L8930_UCON_DEFAULT,
 		.ulcon	     = S5L8930_ULCON_DEFAULT,
 		.ufcon	     = S5L8930_UFCON_DEFAULT,
+
+		.clocks = s5l8930_uart_srcs,
+		.clocks_size = ARRAY_SIZE(s5l8930_uart_srcs),
 	},
 	[2] = {
 		.hwport	     = 2,
@@ -192,6 +212,9 @@ static struct s3c2410_uartcfg s5l8930_uartcfgs[] __initdata = {
 		.ucon	     = S5L8930_UCON_DEFAULT,
 		.ulcon	     = S5L8930_ULCON_DEFAULT,
 		.ufcon	     = S5L8930_UFCON_DEFAULT,
+
+		.clocks = s5l8930_uart_srcs,
+		.clocks_size = ARRAY_SIZE(s5l8930_uart_srcs),
 	},
 	[3] = {
 		.hwport	     = 3,
@@ -199,6 +222,9 @@ static struct s3c2410_uartcfg s5l8930_uartcfgs[] __initdata = {
 		.ucon	     = S5L8930_UCON_DEFAULT,
 		.ulcon	     = S5L8930_ULCON_DEFAULT,
 		.ufcon	     = S5L8930_UFCON_DEFAULT,
+
+		.clocks = s5l8930_uart_srcs,
+		.clocks_size = ARRAY_SIZE(s5l8930_uart_srcs),
 	},
 };
 
@@ -224,19 +250,16 @@ void __init s5l8930_init_irq(void)
 	printk("%s done\n", __func__);
 }
 
+extern struct platform_device s5l8930_spi0;
+extern struct platform_device s5l8930_spi1;
+
 static struct platform_device *s5l8930_devices[] __initdata = {
+	&s5l8930_spi0,
+	&s5l8930_spi1,
 	&s3c_device_i2c0,
 	&s3c_device_i2c1,
 	//&s3c_device_usb_hsotg,
 };
-
-void s3c_i2c0_cfg_gpio(struct platform_device *dev)
-{
-}
-
-void s3c_i2c1_cfg_gpio(struct platform_device *dev)
-{
-}
 
 void __init s5l8930_init(void)
 {
