@@ -932,8 +932,9 @@ static struct clk clk_usbphy = {
 };
 
 static struct clk clk_usbotg = {
-	.name = "usbotg",
+	.name = "otg",
 	.id = -1,
+	.parent = &clk_usbreg,
 	.enable = s5l_clock_gate_toggle_zone,
 	.ctrlbit = S5L_MAKE_CLOCKGATE(ZONE_MPERF, 0x18),
 };
@@ -1229,9 +1230,16 @@ static struct clk clk_uclk0 = {
 	.rate = 24000000,
 };
 
+static struct clk clk_xusbti = {
+	.name = "xusbti",
+	.id = -1,
+	.parent = &clk_xtal,
+};
+
 static struct clk *clocks_init[] = {
 	&clk_uart0, // Used for debugging
 	&clk_uclk0,
+	&clk_xusbti,
 };
 
 static struct clk *clocks_disable[] = {
