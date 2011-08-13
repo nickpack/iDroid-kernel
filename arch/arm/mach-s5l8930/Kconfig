@@ -34,12 +34,12 @@ config MACH_IPAD_1G
 	bool "iPad 1G"
 	select CPU_S5L8930
 	help
-	  Enable support for the 1th generation
+	  Enable support for the 1st generation
 	  iPad.
 
 config MACH_APPLETV_2G
 	bool "AppleTV 2G"
 	select CPU_S5L8930
 	help
-	  Enable support for the 2th generation
+	  Enable support for the 2nd generation
 	  AppleTV.
