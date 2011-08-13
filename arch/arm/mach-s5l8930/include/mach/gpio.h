@@ -17,8 +17,8 @@
 #define gpio_to_irq	__gpio_to_irq
 
 #define S5L8930_GPIO(x)	(((((x) >> 8) & 0xFF)*8) + ((x) & 0xF))
-#define S3C_GPIO_END	175
-#define ARCH_NR_GPIOS	(S3C_GPIO_END+1)
+#define S3C_GPIO_END	176
+#define ARCH_NR_GPIOS	(S3C_GPIO_END)
 
 static inline int irq_to_gpio(int x) { return 0xFFFFFFFF; }
 

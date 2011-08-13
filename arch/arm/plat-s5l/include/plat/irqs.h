@@ -13,10 +13,9 @@
 #ifndef  _S5L_IRQS_
 #define  _S5L_IRQS_
 
-#define S5L_SUBIRQ_START	(4*32) // We have 4 VICs.
-#define S5L_SUBIRQ(x)		(S5L_SUBIRQ_START + (x))
+#include <mach/irqs.h>
 
-/* UART interrupts, each UART has 4 intterupts per channel so
+/* UART interrupts, each UART has 4 interrupts per channel so
  * use the space between the ISA and S3C main interrupts. Note, these
  * are not in the same order as the S3C24XX series! */
 
