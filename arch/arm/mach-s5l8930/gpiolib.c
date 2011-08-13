@@ -14,6 +14,8 @@
 #include <linux/io.h>
 #include <linux/gpio.h>
 #include <linux/bitops.h>
+#include <linux/platform_device.h>
+#include <linux/delay.h>
 
 #include <asm/mach-types.h>
 
