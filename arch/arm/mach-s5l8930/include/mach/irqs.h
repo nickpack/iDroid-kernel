@@ -34,6 +34,8 @@
 #define IRQ_UART2	0x18
 #define IRQ_UART3	0x19
 
+#define IRQ_HSMMC0	0x26
+
 #define IRQ_SPI0 0x1D
 #define IRQ_SPI1 0x1E
 

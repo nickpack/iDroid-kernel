@@ -11,6 +11,7 @@ config CPU_S5L8930
 	select SERIAL_SAMSUNG
 	select SERIAL_S5L8900
 	select S3C_DEV_I2C1
+	select S3C_DEV_HSMMC
 	select S3C_DEV_USB_HSOTG
 	select SPI_S5L
 	select USB_GADGET_S3C_HSOTG

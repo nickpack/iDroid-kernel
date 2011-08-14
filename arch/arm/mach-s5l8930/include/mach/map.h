@@ -200,6 +200,8 @@
 #define S3C_PA_IIC			PA_I2C0
 #define S3C_PA_IIC1			PA_I2C1
 
+#define S3C_PA_HSMMC0		PA_SDIO
+
 #define S5L_PA_UART0		PA_UART0
 #define S5L_PA_UART1		PA_UART1
 #define S5L_PA_UART2		PA_UART2

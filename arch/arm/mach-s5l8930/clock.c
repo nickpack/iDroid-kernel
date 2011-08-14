@@ -155,7 +155,6 @@ static void s5l_clock_gate_toggle_idx(int _idx, int _enable)
 		writel(readl(reg) &~ 0xF, reg);
 
 	while((readl(reg) & 0xF) != ((readl(reg) >> 4) & 0xF));
-	printk("%s: %d %d done\n", __func__, _idx, _enable);
 }
 
 static int s5l_clock_gate_toggle(struct clk *_clk, int _enable)
@@ -168,7 +167,7 @@ struct s5l_power_zone
 {
 	const char *name;
 	int gate;
-	unsigned long count;
+	int count;
 };
 
 enum s5l_power_zones
@@ -204,6 +203,7 @@ static struct s5l_power_zone s5l_power_zones[] = {
 
 static void s5l_power_zone_toggle(struct s5l_power_zone *_z, int _enable)
 {
+	printk("%s_toggle: %d (%d).\n", _z->name, _enable, _z->count);
 	if(_enable)
 	{
 		if((_z->count++) == 0)
@@ -218,6 +218,7 @@ static void s5l_power_zone_toggle(struct s5l_power_zone *_z, int _enable)
 		if(_z->count == 0)
 			s5l_clock_gate_toggle_idx(_z->gate, 0);
 	}
+	printk("%s_toggled: %d (%d).\n", _z->name, _enable, _z->count);
 }
 
 static int s5l_clock_gate_toggle_zone(struct clk *_clk, int _enable)
@@ -1230,8 +1231,8 @@ static struct clk clk_uclk0 = {
 	.rate = 24000000,
 };
 
-static struct clk clk_xusbti = {
-	.name = "xusbti",
+struct clk clk_xusbxti = {
+	.name = "xusbxti",
 	.id = -1,
 	.parent = &clk_xtal,
 };
@@ -1239,7 +1240,7 @@ static struct clk clk_xusbti = {
 static struct clk *clocks_init[] = {
 	&clk_uart0, // Used for debugging
 	&clk_uclk0,
-	&clk_xusbti,
+	&clk_xusbxti,
 };
 
 static struct clk *clocks_disable[] = {
@@ -1295,11 +1296,16 @@ __init void s5l8930_cpu_init_clocks(int _xtal)
 	int i;
 
 	s3c24xx_register_baseclocks(_xtal);
-	clk_p.parent = &clk_lperf0;
+	clk_p.parent = &clk_lperf0.clk;
 
 	// starts at 1 to not disable MPERF
-	for(i = 1; i < ARRAY_SIZE(s5l_power_zones); i++)
-		s5l_power_zone_toggle(&s5l_power_zones[i], 0);
+	for(i = 0; i < ARRAY_SIZE(s5l_power_zones); i++)
+	{
+		if(i == 0)
+			s5l_power_zone_toggle(&s5l_power_zones[i], 1);
+		else
+			s5l_power_zone_toggle(&s5l_power_zones[i], 0);
+	}
 
 	for(i = 0; i < ARRAY_SIZE(clksrcs); i++)
 	{
