@@ -2044,6 +2044,13 @@ config FB_S3C2410_DEBUG
 	  Turn on debugging messages. Note that you can set/unset at run time
 	  through sysfs
 
+config S5P_MIPI_DSI
+	tristate "Samsung SoC MIPI-DSI support."
+	depends on (ARCH_S5PV210 || ARCH_EXYNOS4 || ARCH_S5L)
+	default n
+	---help---
+	  This enables support for MIPI-DSI device.
+
 config FB_NUC900
         bool "NUC900 LCD framebuffer support"
         depends on FB && ARCH_W90X900
