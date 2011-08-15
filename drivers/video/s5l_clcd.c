@@ -87,6 +87,8 @@ static int s5l_clcd_dev_probe(struct mipi_dsim_lcd_device *_dev)
 	else
 		printk(KERN_ERR "%s: failed to read panel id.\n", __func__);*/
 
+	//display_pipe_configure_window(state->dp, 0,
+	//		state->dp->info->width, state->dp->info->height, 32); // Framebuffer is always RGB888
 	s5l_clcd_enable_framebuffer(state, true);
 	udelay(100);
 

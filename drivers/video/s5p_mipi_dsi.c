@@ -159,21 +159,13 @@ static int s5p_mipi_dsi_registration_done(struct mipi_dsim_device *dsim)
 	if (dsim->pd->phy_enable)
 		dsim->pd->phy_enable(dsim, true);
 
-	printk("Initializing DSIM.\n");
-
 	s5p_mipi_dsi_init_dsim(dsim);
 	s5p_mipi_dsi_init_link(dsim);
 
-	printk("Something HS\n");
-
 	s5p_mipi_dsi_set_hs_enable(dsim);
-
-	printk("Setting display mode.\n");
 
 	/* set display timing. */
 	s5p_mipi_dsi_set_display_mode(dsim, dsim->dsim_config);
-
-	printk("Probing driver");
 
 	/* initialize mipi-dsi client(lcd panel). */
 	if(lcd_drv->probe)

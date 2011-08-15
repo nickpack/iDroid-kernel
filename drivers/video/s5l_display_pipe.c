@@ -52,7 +52,7 @@ static struct fb_ops display_pipe_fb_ops = {
 //	.fb_release	= display_pipe_fb_release,
 //	.fb_check_var	= display_pipe_fb_check_var,
 //	.fb_set_par	= fb_set_par,
-//	.fb_set_var	= fb_set_var,
+//	.fb_set_var	= display_pipe_fb_set_var,
 //	.fb_blank	= fb_blank,
 	.fb_fillrect	= cfb_fillrect,
 	.fb_copyarea	= cfb_copyarea,
@@ -102,6 +102,7 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 		ui->regs = _state->regs + display_pipe_uis[_idx];
 
 		fbinfo->fix.type	= FB_TYPE_PACKED_PIXELS;
+		fbinfo->fix.visual = FB_VISUAL_TRUECOLOR;
 		fbinfo->fix.accel	= FB_ACCEL_NONE;
 		fbinfo->var.activate	= FB_ACTIVATE_NOW;
 		fbinfo->var.vmode	= FB_VMODE_NONINTERLACED;
@@ -111,6 +112,15 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 		fbinfo->fbops		= &display_pipe_fb_ops;
 		fbinfo->flags		= FBINFO_FLAG_DEFAULT;
 		fbinfo->pseudo_palette  = &ui->pseudo_palette;
+
+		fbinfo->var.red.offset = 24;
+		fbinfo->var.red.length = 8;
+		fbinfo->var.green.offset = 16;
+		fbinfo->var.green.length = 8;
+		fbinfo->var.blue.offset = 8;
+		fbinfo->var.blue.length = 8;
+		fbinfo->var.transp.offset = 0;
+		fbinfo->var.transp.length = 8;
 	}
 	else
 		fbinfo = ui->info;
@@ -136,8 +146,10 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 		fbinfo->var.bits_per_pixel = _bpp;
 	}
 
-	if(_width != fbinfo->var.width
-			|| _height != fbinfo->var.height)
+	printk("%s: bpp done.\n", __func__);
+
+	if(_width != fbinfo->var.xres
+			|| _height != fbinfo->var.yres)
 	{
 		u32 fsize = (_bpp * _width * _height)/8;
 		dma_addr_t addr;
@@ -146,7 +158,8 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 			dma_free_writecombine(&_state->pdev->dev, fbinfo->fix.smem_len,
 					ui->buffer, fbinfo->fix.smem_start);
 
-		fbinfo->fix.smem_len = PAGE_ALIGN(fsize);
+		fbinfo->fix.line_length = (_width * _bpp) / 8;
+		fbinfo->fix.smem_len = fsize;
 		ui->buffer = dma_alloc_writecombine(&_state->pdev->dev, fbinfo->fix.smem_len,
 				&addr, GFP_KERNEL);
 		if(!ui->buffer)
@@ -163,12 +176,16 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 		writel(0xFFFF0202, _state->regs + S5L_DPUI0ALPH); // TODO: Figure out this for UI-1.
 
 		fbinfo->fix.smem_start = addr;
-		fbinfo->var.width = _width;
-		fbinfo->var.height = _height;
+		fbinfo->var.xres_virtual = fbinfo->var.xres = _width;
+		fbinfo->var.yres_virtual = fbinfo->var.yres = _height;
 	}
+	
+	printk("%s: fb done.\n", __func__);
 
 	writel(display_pipe_ui_bits[_idx] | readl(_state->regs + S5L_DPCTL),
 			_state->regs + S5L_DPCTL);
+
+	printk("%s: regs done.\n", __func__);
 
 	if(reg)
 		register_framebuffer(fbinfo);

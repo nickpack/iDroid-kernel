@@ -576,12 +576,12 @@ int s5p_mipi_dsi_init_link(struct mipi_dsim_device *dsim)
 
 	switch (dsim->state) {
 	case DSIM_STATE_INIT:
-		/* set clock configuration */
-		s5p_mipi_dsi_set_clock(dsim, dsim->dsim_config->e_byte_clk, 1);
-
 		s5p_mipi_dsi_sw_reset(dsim);
 
 		s5p_mipi_dsi_init_fifo_pointer(dsim, 0x1f);
+
+		/* set clock configuration */
+		s5p_mipi_dsi_set_clock(dsim, dsim->dsim_config->e_byte_clk, 1);
 
 		/* dsi configuration */
 		s5p_mipi_dsi_init_config(dsim);
