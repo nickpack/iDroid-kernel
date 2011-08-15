@@ -2355,8 +2355,21 @@ config FB_APPLE_IPHONE
 	select FB_CFB_IMAGEBLIT
 	select FB_SYS_FOPS
 
-config FB_S5L8920
-	tristate "S5L8920 framebuffer support"
+config S5L_DISPLAY_PIPE
+	tristate "S5L8930 display pipe support"
+	depends on ARCH_S5L
+
+config FB_S5L_CLCD
+	tristate "S5L8930 Colour LCD support"
+	depends on S5L_DISPLAY_PIPE && S5P_MIPI_DSI
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	select FB_SYS_FOPS
+
+config FB_S5L_RGBOUT
+	tristate "S5L8930 RGB-out support"
+	depends on S5L_DISPLAY_PIPE
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT

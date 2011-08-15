@@ -28,6 +28,7 @@
 #include <plat/iic.h>
 #include <plat/regs-serial.h>
 #include <plat/irq-vic-timer.h>
+#include <plat/sdhci.h>
 
 static struct map_desc s5l8930_iodesc[] __initdata = {
 	{
@@ -141,8 +142,35 @@ static __init void s5l8930_cpu_map_io(void)
 	printk("%s done\n", __func__);
 }
 
+static char *sdio0_clocks[] = {
+	"sdio",
+	NULL,
+	NULL,
+	NULL,
+};
+
+static struct s3c_sdhci_platdata sdio0_pdata = {
+	.clocks = sdio0_clocks,
+};
+
+extern struct platform_device s5l8930_spi0;
+extern struct platform_device s5l8930_spi1;
+
+static struct platform_device *s5l8930_devices[] __initdata = {
+	&s5l8930_spi0,
+	&s5l8930_spi1,
+	&s3c_device_i2c0,
+	&s3c_device_i2c1,
+	&s3c_device_usb_hsotg,
+	&s3c_device_hsmmc0,
+};
+
 static __init int s5l8930_cpu_init(void)
 {
+	s3c_sdhci0_set_platdata(&sdio0_pdata);
+	s3c_i2c0_set_platdata(NULL);
+	s3c_i2c1_set_platdata(NULL);
+	platform_add_devices(s5l8930_devices, ARRAY_SIZE(s5l8930_devices));
 	return 0;
 }
 
@@ -235,7 +263,7 @@ void __init s5l8930_map_io(void)
 	s3c24xx_init_uarts(s5l8930_uartcfgs, ARRAY_SIZE(s5l8930_uartcfgs));
 }
 
-static void __iomem *s5l8930_vics[] = {
+static void __initdata __iomem *s5l8930_vics[] = {
 	VA_VIC0,
 	VA_VIC1,
 	VA_VIC2,
@@ -250,22 +278,7 @@ void __init s5l8930_init_irq(void)
 	printk("%s done\n", __func__);
 }
 
-extern struct platform_device s5l8930_spi0;
-extern struct platform_device s5l8930_spi1;
-
-static struct platform_device *s5l8930_devices[] __initdata = {
-	&s5l8930_spi0,
-	&s5l8930_spi1,
-	&s3c_device_i2c0,
-	&s3c_device_i2c1,
-	&s3c_device_usb_hsotg,
-	&s3c_device_hsmmc0,
-};
-
 void __init s5l8930_init(void)
 {
 	printk("%s\n", __func__);
-	s3c_i2c0_set_platdata(NULL);
-	s3c_i2c1_set_platdata(NULL);
-	platform_add_devices(s5l8930_devices, ARRAY_SIZE(s5l8930_devices));
 }

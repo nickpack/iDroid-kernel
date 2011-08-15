@@ -36,6 +36,12 @@
 
 #define IRQ_HSMMC0	0x26
 
+#define IRQ_MIPI_DSIM	0x28
+#define IRQ_CLCD0		0x29
+#define IRQ_CLCD1		0x30
+#define IRQ_RGBOUT0		0x31
+#define IRQ_RGBOUT1		0x32
+
 #define IRQ_SPI0 0x1D
 #define IRQ_SPI1 0x1E
 

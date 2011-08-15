@@ -27,9 +27,19 @@
 #include <plat/mipi_dsim.h>
 #include <plat/regs-dsim.h>
 
+#define MIPI_LOWLEVEL_DEBUG
+
+#ifdef MIPI_LOWLEVEL_DEBUG
+#define dbg_printk(x...) printk(x)
+#else
+#define dbg_printk(x...)
+#endif
+
 void s5p_mipi_dsi_func_reset(struct mipi_dsim_device *dsim)
 {
 	unsigned int reg;
+
+	dbg_printk("%s\n", __func__);
 
 	reg = readl(dsim->reg_base + S5P_DSIM_SWRST);
 
@@ -41,6 +51,8 @@ void s5p_mipi_dsi_func_reset(struct mipi_dsim_device *dsim)
 void s5p_mipi_dsi_sw_reset(struct mipi_dsim_device *dsim)
 {
 	unsigned int reg;
+
+	dbg_printk("%s\n", __func__);
 
 	reg = readl(dsim->reg_base + S5P_DSIM_SWRST);
 
@@ -54,6 +66,8 @@ void s5p_mipi_dsi_set_interrupt_mask(struct mipi_dsim_device *dsim,
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_INTMSK);
 
+	dbg_printk("%s\n", __func__);
+
 	if (mask)
 		reg |= mode;
 	else
@@ -66,6 +80,8 @@ void s5p_mipi_dsi_init_fifo_pointer(struct mipi_dsim_device *dsim,
 		unsigned int cfg)
 {
 	unsigned int reg;
+
+	dbg_printk("%s\n", __func__);
 
 	reg = readl(dsim->reg_base + S5P_DSIM_FIFOCTRL);
 
@@ -82,6 +98,8 @@ void s5p_mipi_dsi_init_fifo_pointer(struct mipi_dsim_device *dsim,
 void s5p_mipi_dsi_set_phy_tunning(struct mipi_dsim_device *dsim,
 		unsigned int value)
 {
+	dbg_printk("%s\n", __func__);
+
 	writel(DSIM_AFC_CTL(value), dsim->reg_base + S5P_DSIM_PHYACCHR);
 }
 
@@ -89,6 +107,8 @@ void s5p_mipi_dsi_set_main_disp_resol(struct mipi_dsim_device *dsim,
 	unsigned int width_resol, unsigned int height_resol)
 {
 	unsigned int reg;
+
+	dbg_printk("%s\n", __func__);
 
 	/* standby should be set after configuration so set to not ready*/
 	reg = (readl(dsim->reg_base + S5P_DSIM_MDRESOL)) &
@@ -107,6 +127,8 @@ void s5p_mipi_dsi_set_main_disp_vporch(struct mipi_dsim_device *dsim,
 {
 	unsigned int reg;
 
+	dbg_printk("%s\n", __func__);
+
 	reg = (readl(dsim->reg_base + S5P_DSIM_MVPORCH)) &
 		~(DSIM_CMD_ALLOW_MASK) & ~(DSIM_STABLE_VFP_MASK) &
 		~(DSIM_MAIN_VBP_MASK);
@@ -123,6 +145,8 @@ void s5p_mipi_dsi_set_main_disp_hporch(struct mipi_dsim_device *dsim,
 {
 	unsigned int reg;
 
+	dbg_printk("%s\n", __func__);
+
 	reg = (readl(dsim->reg_base + S5P_DSIM_MHPORCH)) &
 		~(DSIM_MAIN_HFP_MASK) & ~(DSIM_MAIN_HBP_MASK);
 
@@ -135,6 +159,8 @@ void s5p_mipi_dsi_set_main_disp_sync_area(struct mipi_dsim_device *dsim,
 	unsigned int vert, unsigned int hori)
 {
 	unsigned int reg;
+
+	dbg_printk("%s\n", __func__);
 
 	reg = (readl(dsim->reg_base + S5P_DSIM_MSYNC)) &
 		~(DSIM_MAIN_VSA_MASK) & ~(DSIM_MAIN_HSA_MASK);
@@ -149,6 +175,8 @@ void s5p_mipi_dsi_set_sub_disp_resol(struct mipi_dsim_device *dsim,
 	unsigned int vert, unsigned int hori)
 {
 	unsigned int reg;
+
+	dbg_printk("%s\n", __func__);
 
 	reg = (readl(dsim->reg_base + S5P_DSIM_SDRESOL)) &
 		~(DSIM_SUB_STANDY_MASK);
@@ -171,6 +199,8 @@ void s5p_mipi_dsi_init_config(struct mipi_dsim_device *dsim)
 	unsigned int cfg = (readl(dsim->reg_base + S5P_DSIM_CONFIG)) &
 		~(1 << 28) & ~(0x1f << 20) & ~(0x3 << 5);
 
+	dbg_printk("%s\n", __func__);
+
 	cfg =	(dsim_config->auto_flush << 29) |
 		(dsim_config->eot_disable << 28) |
 		(dsim_config->auto_vertical_cnt << DSIM_AUTO_MODE_SHIFT) |
@@ -189,6 +219,8 @@ void s5p_mipi_dsi_display_config(struct mipi_dsim_device *dsim,
 	u32 reg = (readl(dsim->reg_base + S5P_DSIM_CONFIG)) &
 		~(0x3 << 26) & ~(1 << 25) & ~(0x3 << 18) & ~(0x7 << 12) &
 		~(0x3 << 16) & ~(0x7 << 8);
+
+	dbg_printk("%s\n", __func__);
 
 	if (dsim_config->e_interface == DSIM_VIDEO)
 		reg |= (1 << 25);
@@ -212,6 +244,8 @@ void s5p_mipi_dsi_enable_lane(struct mipi_dsim_device *dsim, unsigned int lane,
 {
 	unsigned int reg;
 
+	dbg_printk("%s\n", __func__);
+
 	reg = readl(dsim->reg_base + S5P_DSIM_CONFIG);
 
 	if (enable)
@@ -228,6 +262,8 @@ void s5p_mipi_dsi_set_data_lane_number(struct mipi_dsim_device *dsim,
 {
 	unsigned int cfg;
 
+	dbg_printk("%s\n", __func__);
+
 	/* get the data lane number. */
 	cfg = DSIM_NUM_OF_DATA_LANE(count);
 
@@ -238,6 +274,8 @@ void s5p_mipi_dsi_enable_afc(struct mipi_dsim_device *dsim, unsigned int enable,
 	unsigned int afc_code)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_PHYACCHR);
+
+	dbg_printk("%s\n", __func__);
 
 	if (enable) {
 		reg |= (1 << 14);
@@ -255,6 +293,8 @@ void s5p_mipi_dsi_enable_pll_bypass(struct mipi_dsim_device *dsim,
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_CLKCTRL)) &
 		~(DSIM_PLL_BYPASS_EXTERNAL);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= enable << DSIM_PLL_BYPASS_SHIFT;
 
 	writel(reg, dsim->reg_base + S5P_DSIM_CLKCTRL);
@@ -264,6 +304,8 @@ void s5p_mipi_dsi_set_pll_pms(struct mipi_dsim_device *dsim, unsigned int p,
 	unsigned int m, unsigned int s)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_PLLCTRL);
+
+	dbg_printk("%s\n", __func__);
 
 	reg |= ((p & 0x3f) << 13) | ((m & 0x1ff) << 4) | ((s & 0x7) << 1);
 
@@ -275,6 +317,8 @@ void s5p_mipi_dsi_pll_freq_band(struct mipi_dsim_device *dsim,
 {
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_PLLCTRL)) &
 		~(0x1f << DSIM_FREQ_BAND_SHIFT);
+
+	dbg_printk("%s\n", __func__);
 
 	reg |= ((freq_band & 0x1f) << DSIM_FREQ_BAND_SHIFT);
 
@@ -288,6 +332,8 @@ void s5p_mipi_dsi_pll_freq(struct mipi_dsim_device *dsim,
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_PLLCTRL)) &
 		~(0x7ffff << 1);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= (pre_divider & 0x3f) << 13 | (main_divider & 0x1ff) << 4 |
 		(scaler & 0x7) << 1;
 
@@ -297,6 +343,8 @@ void s5p_mipi_dsi_pll_freq(struct mipi_dsim_device *dsim,
 void s5p_mipi_dsi_pll_stable_time(struct mipi_dsim_device *dsim,
 	unsigned int lock_time)
 {
+	dbg_printk("%s\n", __func__);
+
 	writel(lock_time, dsim->reg_base + S5P_DSIM_PLLTMR);
 }
 
@@ -304,6 +352,8 @@ void s5p_mipi_dsi_enable_pll(struct mipi_dsim_device *dsim, unsigned int enable)
 {
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_PLLCTRL)) &
 		~(0x1 << DSIM_PLL_EN_SHIFT);
+
+	dbg_printk("%s\n", __func__);
 
 	reg |= ((enable & 0x1) << DSIM_PLL_EN_SHIFT);
 
@@ -316,6 +366,8 @@ void s5p_mipi_dsi_set_byte_clock_src(struct mipi_dsim_device *dsim,
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_CLKCTRL)) &
 		~(0x3 << DSIM_BYTE_CLK_SRC_SHIFT);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= ((unsigned int) src) << DSIM_BYTE_CLK_SRC_SHIFT;
 
 	writel(reg, dsim->reg_base + S5P_DSIM_CLKCTRL);
@@ -326,6 +378,8 @@ void s5p_mipi_dsi_enable_byte_clock(struct mipi_dsim_device *dsim,
 {
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_CLKCTRL)) &
 		~(1 << DSIM_BYTE_CLKEN_SHIFT);
+
+	dbg_printk("%s\n", __func__);
 
 	reg |= enable << DSIM_BYTE_CLKEN_SHIFT;
 
@@ -338,6 +392,8 @@ void s5p_mipi_dsi_set_esc_clk_prs(struct mipi_dsim_device *dsim,
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_CLKCTRL)) &
 		~(1 << DSIM_ESC_CLKEN_SHIFT) & ~(0xffff);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= enable << DSIM_ESC_CLKEN_SHIFT;
 	if (enable)
 		reg |= prs_val;
@@ -349,6 +405,8 @@ void s5p_mipi_dsi_enable_esc_clk_on_lane(struct mipi_dsim_device *dsim,
 		unsigned int lane_sel, unsigned int enable)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_CLKCTRL);
+
+	dbg_printk("%s\n", __func__);
 
 	if (enable)
 		reg |= DSIM_LANE_ESC_CLKEN(lane_sel);
@@ -365,6 +423,8 @@ void s5p_mipi_dsi_force_dphy_stop_state(struct mipi_dsim_device *dsim,
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_ESCMODE)) &
 		~(0x1 << DSIM_FORCE_STOP_STATE_SHIFT);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= ((enable & 0x1) << DSIM_FORCE_STOP_STATE_SHIFT);
 
 	writel(reg, dsim->reg_base + S5P_DSIM_ESCMODE);
@@ -373,6 +433,8 @@ void s5p_mipi_dsi_force_dphy_stop_state(struct mipi_dsim_device *dsim,
 unsigned int s5p_mipi_dsi_is_lane_state(struct mipi_dsim_device *dsim)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_STATUS);
+
+	dbg_printk("%s\n", __func__);
 
 	/**
 	 * check clock and data lane states.
@@ -396,6 +458,8 @@ void s5p_mipi_dsi_set_stop_state_counter(struct mipi_dsim_device *dsim,
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_ESCMODE)) &
 		~(0x7ff << DSIM_STOP_STATE_CNT_SHIFT);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= ((cnt_val & 0x7ff) << DSIM_STOP_STATE_CNT_SHIFT);
 
 	writel(reg, dsim->reg_base + S5P_DSIM_ESCMODE);
@@ -406,6 +470,8 @@ void s5p_mipi_dsi_set_bta_timeout(struct mipi_dsim_device *dsim,
 {
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_TIMEOUT)) &
 		~(0xff << DSIM_BTA_TOUT_SHIFT);
+
+	dbg_printk("%s\n", __func__);
 
 	reg |= (timeout << DSIM_BTA_TOUT_SHIFT);
 
@@ -418,6 +484,8 @@ void s5p_mipi_dsi_set_lpdr_timeout(struct mipi_dsim_device *dsim,
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_TIMEOUT)) &
 		~(0xffff << DSIM_LPDR_TOUT_SHIFT);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= (timeout << DSIM_LPDR_TOUT_SHIFT);
 
 	writel(reg, dsim->reg_base + S5P_DSIM_TIMEOUT);
@@ -427,6 +495,8 @@ void s5p_mipi_dsi_set_cpu_transfer_mode(struct mipi_dsim_device *dsim,
 		unsigned int lp)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_ESCMODE);
+
+	dbg_printk("%s\n", __func__);
 
 	reg &= ~DSIM_CMD_LPDT_LP;
 
@@ -440,6 +510,8 @@ void s5p_mipi_dsi_set_lcdc_transfer_mode(struct mipi_dsim_device *dsim,
 		unsigned int lp)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_ESCMODE);
+
+	dbg_printk("%s\n", __func__);
 
 	reg &= ~DSIM_TX_LPDT_LP;
 
@@ -455,6 +527,8 @@ void s5p_mipi_dsi_enable_hs_clock(struct mipi_dsim_device *dsim,
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_CLKCTRL)) &
 		~(1 << DSIM_TX_REQUEST_HSCLK_SHIFT);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= enable << DSIM_TX_REQUEST_HSCLK_SHIFT;
 
 	writel(reg, dsim->reg_base + S5P_DSIM_CLKCTRL);
@@ -464,6 +538,8 @@ void s5p_mipi_dsi_dp_dn_swap(struct mipi_dsim_device *dsim,
 		unsigned int swap_en)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_PHYACCHR1);
+
+	dbg_printk("%s\n", __func__);
 
 	reg &= ~(0x3 << 0);
 	reg |= (swap_en & 0x3) << 0;
@@ -477,6 +553,8 @@ void s5p_mipi_dsi_hs_zero_ctrl(struct mipi_dsim_device *dsim,
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_PLLCTRL)) &
 		~(0xf << 28);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= ((hs_zero & 0xf) << 28);
 
 	writel(reg, dsim->reg_base + S5P_DSIM_PLLCTRL);
@@ -487,6 +565,8 @@ void s5p_mipi_dsi_prep_ctrl(struct mipi_dsim_device *dsim, unsigned int prep)
 	unsigned int reg = (readl(dsim->reg_base + S5P_DSIM_PLLCTRL)) &
 		~(0x7 << 20);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= ((prep & 0x7) << 20);
 
 	writel(reg, dsim->reg_base + S5P_DSIM_PLLCTRL);
@@ -495,6 +575,8 @@ void s5p_mipi_dsi_prep_ctrl(struct mipi_dsim_device *dsim, unsigned int prep)
 void s5p_mipi_dsi_clear_interrupt(struct mipi_dsim_device *dsim)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_INTSRC);
+
+	dbg_printk("%s\n", __func__);
 
 	reg |= INTSRC_PLL_STABLE;
 
@@ -505,6 +587,8 @@ void s5p_mipi_dsi_clear_all_interrupt(struct mipi_dsim_device *dsim)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_INTSRC);
 
+	dbg_printk("%s\n", __func__);
+
 	reg |= 0xffffffff;
 
 	writel(reg, dsim->reg_base + S5P_DSIM_INTSRC);
@@ -514,6 +598,8 @@ unsigned int s5p_mipi_dsi_is_pll_stable(struct mipi_dsim_device *dsim)
 {
 	unsigned int reg;
 
+	dbg_printk("%s\n", __func__);
+
 	reg = readl(dsim->reg_base + S5P_DSIM_STATUS);
 
 	return reg & (1 << 31) ? 1 : 0;
@@ -522,6 +608,8 @@ unsigned int s5p_mipi_dsi_is_pll_stable(struct mipi_dsim_device *dsim)
 unsigned int s5p_mipi_dsi_get_fifo_state(struct mipi_dsim_device *dsim)
 {
 	unsigned int ret;
+
+	dbg_printk("%s\n", __func__);
 
 	ret = readl(dsim->reg_base + S5P_DSIM_FIFOCTRL) & ~(0x1f);
 
@@ -533,12 +621,16 @@ void s5p_mipi_dsi_wr_tx_header(struct mipi_dsim_device *dsim,
 {
 	unsigned int reg = (data1 << 16) | (data0 << 8) | ((di & 0x3f) << 0);
 
+	dbg_printk("%s\n", __func__);
+
 	writel(reg, dsim->reg_base + S5P_DSIM_PKTHDR);
 }
 
 unsigned int _s5p_mipi_dsi_get_frame_done_status(struct mipi_dsim_device *dsim)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_INTSRC);
+
+	dbg_printk("%s\n", __func__);
 
 	return (reg & INTSRC_FRAME_DONE) ? 1 : 0;
 }
@@ -547,6 +639,8 @@ void _s5p_mipi_dsi_clear_frame_done(struct mipi_dsim_device *dsim)
 {
 	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_INTSRC);
 
+	dbg_printk("%s\n", __func__);
+
 	writel(reg | INTSRC_FRAME_DONE, dsim->reg_base +
 		S5P_DSIM_INTSRC);
 }
@@ -554,5 +648,17 @@ void _s5p_mipi_dsi_clear_frame_done(struct mipi_dsim_device *dsim)
 void s5p_mipi_dsi_wr_tx_data(struct mipi_dsim_device *dsim,
 		unsigned int tx_data)
 {
+	dbg_printk("%s\n", __func__);
+
 	writel(tx_data, dsim->reg_base + S5P_DSIM_PAYLOAD);
+}
+
+void s5p_mipi_dsi_wait_for_rx_fifo(struct mipi_dsim_device *dsim)
+{
+	u32 fifoctl = readl(dsim->reg_base + S5P_DSIM_FIFOCTRL);
+	while(fifoctl & SFR_RX_EMPTY)
+	{
+		barrier();
+		fifoctl = readl(dsim->reg_base + S5P_DSIM_FIFOCTRL);
+	}
 }

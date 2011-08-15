@@ -28,6 +28,14 @@
 #include <plat/gpio-cfg.h>
 #include <plat/gpio-cfg-helpers.h>
 
+#define GPIO_DEBUG
+
+#ifdef GPIO_DEBUG
+#define dbg_printk(x...) printk(x)
+#else
+#define dbg_printk(x...)
+#endif
+
 static DEFINE_SPINLOCK(gpio_lock);
 static u16 s5l8930_gpio_cache[ARCH_NR_GPIOS];
 static u16 *s5l8930_gpio_reset;
@@ -285,6 +293,8 @@ static int s5l8930_gpio_configure(unsigned _idx, unsigned _cfg)
 	u16 bitmask, value;
 	BUG_ON(_idx >= ARCH_NR_GPIOS);
 
+	dbg_printk("%s: %d %d\n", __func__, _idx, _cfg);
+
 	switch(_cfg)
 	{
 	case 0: // use_as_input
@@ -387,6 +397,8 @@ static void s5l8930_gpio_set(struct gpio_chip *_chip,
 		unsigned _off, int _val)
 {
 	u32 val;
+
+	dbg_printk("%s: %d %d\n", __func__, _off, _val);
 
 	spin_lock(&gpio_lock);
 	val = s5l8930_gpio_cache[_off] &~ 1;

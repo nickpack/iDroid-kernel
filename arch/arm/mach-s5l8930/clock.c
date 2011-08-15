@@ -35,6 +35,14 @@
 #define SHIFT_DIV5	23
 #define SIZE_DIV	5
 
+//#define DEBUG_CLOCKS
+
+#ifdef DEBUG_CLOCKS
+#define debug_printk(x...) printk(x)
+#else
+#define debug_printk(x...)
+#endif
+
 // PLLs
 
 static int s5l_clock_always_on(struct clk *_clk, int _enable)
@@ -147,7 +155,7 @@ static void s5l_clock_gate_toggle_idx(int _idx, int _enable)
 	uint32_t __iomem *reg = &S5L_CLOCK_GATE[_idx];
 	BUG_ON(_idx >= 64);
 
-	printk("%s: 0x%p 0x%x %d\n", __func__, reg, _idx, _enable);
+	debug_printk("%s: 0x%p 0x%x %d\n", __func__, reg, _idx, _enable);
 
 	if(_enable)
 		writel(readl(reg) | 0xF, reg);
@@ -203,7 +211,7 @@ static struct s5l_power_zone s5l_power_zones[] = {
 
 static void s5l_power_zone_toggle(struct s5l_power_zone *_z, int _enable)
 {
-	printk("%s_toggle: %d (%d).\n", _z->name, _enable, _z->count);
+	debug_printk("%s_toggle: %d (%d).\n", _z->name, _enable, _z->count);
 	if(_enable)
 	{
 		if((_z->count++) == 0)
@@ -218,7 +226,7 @@ static void s5l_power_zone_toggle(struct s5l_power_zone *_z, int _enable)
 		if(_z->count == 0)
 			s5l_clock_gate_toggle_idx(_z->gate, 0);
 	}
-	printk("%s_toggled: %d (%d).\n", _z->name, _enable, _z->count);
+	debug_printk("%s_toggled: %d (%d).\n", _z->name, _enable, _z->count);
 }
 
 static int s5l_clock_gate_toggle_zone(struct clk *_clk, int _enable)
@@ -964,8 +972,8 @@ static struct clk clk_usbohci1 = {
 };
 
 static struct clk clk_sdio_wifi = {
-	.name = "sdio-wifi",
-	.id = -1,
+	.name = "hsmmc",
+	.id = 0,
 	.enable = s5l_clock_gate_toggle,
 	.ctrlbit = 0x24,
 };
@@ -978,8 +986,8 @@ static struct clk clk_sha = {
 };
 
 static struct clk clk_sdio_ceata = {
-	.name = "sdio-ceata",
-	.id = -1,
+	.name = "hsmmc",
+	.id = 1,
 	.enable = s5l_clock_gate_toggle,
 	.ctrlbit = 0x26,
 };
@@ -1188,7 +1196,7 @@ static struct clk clk_clcd = {
 };
 
 static struct clk clk_mipi_dsi = {
-	.name = "mipi-dsi",
+	.name = "dsim",
 	.id = -1,
 	.parent = &clk_mipi.clk,
 	.enable = s5l_clock_gate_toggle_zone,
