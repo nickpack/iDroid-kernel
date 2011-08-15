@@ -96,5 +96,6 @@ void s5p_mipi_dsi_wr_tx_header(struct mipi_dsim_device *dsim, unsigned int di,
 				unsigned int data0, unsigned int data1);
 void s5p_mipi_dsi_wr_tx_data(struct mipi_dsim_device *dsim,
 		unsigned int tx_data);
+void s5p_mipi_dsi_wait_for_rx_fifo(struct mipi_dsim_device *dsim);
 
 #endif /* _S5P_MIPI_DSI_LOWLEVEL_H */

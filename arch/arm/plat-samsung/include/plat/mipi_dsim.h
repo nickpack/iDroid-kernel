@@ -16,8 +16,8 @@
 
 #include <linux/device.h>
 #include <linux/fb.h>
-
-#define PANEL_NAME_SIZE		(32)
+#include <linux/list.h>
+#include <linux/completion.h>
 
 enum mipi_dsim_interface_type {
 	DSIM_COMMAND,
@@ -207,10 +207,17 @@ struct mipi_dsim_device {
 	void __iomem			*reg_base;
 	struct mutex			lock;
 
+	struct list_head		list;
+
 	struct mipi_dsim_config		*dsim_config;
 	struct mipi_dsim_master_ops	*master_ops;
 	struct mipi_dsim_lcd_device	*dsim_lcd_dev;
 	struct mipi_dsim_lcd_driver	*dsim_lcd_drv;
+
+	void 					*rx_buffer;
+	size_t					rx_size;
+	int						rx_result;
+	struct completion		rx_completion;
 
 	unsigned int			state;
 	unsigned int			resume_complete;
@@ -233,13 +240,11 @@ struct mipi_dsim_device {
  * @phy_enable: pointer to a callback controlling D-PHY enable/reset
  */
 struct s5p_platform_mipi_dsim {
-	char				lcd_panel_name[PANEL_NAME_SIZE];
-
 	struct mipi_dsim_config		*dsim_config;
 	void				*lcd_panel_info;
 
-	int (*mipi_power)(struct platform_device *pdev, unsigned int enable);
-	int (*phy_enable)(struct platform_device *pdev, bool on);
+	int (*mipi_power)(struct mipi_dsim_device *pdev, unsigned int enable);
+	int (*phy_enable)(struct mipi_dsim_device *pdev, bool on);
 };
 /**
  * struct mipi_dsim_master_ops - callbacks to mipi-dsi operations.
@@ -258,7 +263,7 @@ struct mipi_dsim_master_ops {
 	int (*cmd_write)(struct mipi_dsim_device *dsim, unsigned int data_id,
 		unsigned int data0, unsigned int data1);
 	int (*cmd_read)(struct mipi_dsim_device *dsim, unsigned int data_id,
-		unsigned int data0, unsigned int data1);
+		unsigned int data0, unsigned int data1, void *buffer, size_t size);
 	int (*get_dsim_frame_done)(struct mipi_dsim_device *dsim);
 	int (*clear_dsim_frame_done)(struct mipi_dsim_device *dsim);
 
@@ -301,17 +306,16 @@ struct mipi_dsim_lcd_device {
  *
  * @name: name of the driver to use with this device, or an
  *	alias for that name.
- * @id: id of driver to be registered.
- *	this id would be used for finding device object registered.
  */
 struct mipi_dsim_lcd_driver {
 	char			*name;
-	int			id;
+
+	struct list_head list;
 
 	int	(*probe)(struct mipi_dsim_lcd_device *dsim_dev);
 	int	(*remove)(struct mipi_dsim_lcd_device *dsim_dev);
 	void	(*shutdown)(struct mipi_dsim_lcd_device *dsim_dev);
-	int	(*suspend)(struct mipi_dsim_lcd_device *dsim_dev);
+	int	(*suspend)(struct mipi_dsim_lcd_device *dsim_dev, pm_message_t msg);
 	int	(*resume)(struct mipi_dsim_lcd_device *dsim_dev);
 };
 
@@ -320,6 +324,12 @@ struct mipi_dsim_lcd_driver {
  * to mipi-dsi driver.
  */
 int s5p_mipi_dsi_register_lcd_driver(struct mipi_dsim_lcd_driver
+						*lcd_drv);
+/**
+ * unregister mipi_dsim_lcd_driver object defined by lcd panel driver
+ * to mipi-dsi driver.
+ */
+void s5p_mipi_dsi_unregister_lcd_driver(struct mipi_dsim_lcd_driver
 						*lcd_drv);
 
 /**
@@ -340,6 +350,6 @@ int s5p_mipi_dsi_dphy_power(struct mipi_dsim_device *dsim,
  * @on: true to enable D-PHY and deassert its reset
  *	false to disable D-PHY
  */
-int s5p_dsim_phy_enable(struct platform_device *pdev, bool on);
+int s5p_dsim_phy_enable(struct mipi_dsim_device *pdev, bool on);
 
 #endif /* _DSIM_H */

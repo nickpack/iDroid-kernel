@@ -45,8 +45,9 @@
 
 /* DSIM_STATUS */
 #define DSIM_STOP_STATE_DAT(x)	(((x) & 0xf) << 0)
-#define DSIM_STOP_STATE_CLK	(1 << 8)
+#define DSIM_STOP_STATE_CLK		(1 << 8)
 #define DSIM_TX_READY_HS_CLK	(1 << 10)
+#define DSIM_STATUS_SWRST		(1 << 20)
 
 /* DSIM_SWRST */
 #define DSIM_FUNCRST		(1 << 16)
@@ -124,6 +125,9 @@
 #define DSIM_SUB_HRESOL_MASK		((0x7ff) << DSIM_SUB_HRESOL_SHIFT)
 
 /* S5P_DSIM_INTSRC */
+#define INTSRC_RX_ACK			(1 << 16)
+#define INTSRC_RXDAT_DONE		(1 << 18)
+#define INTSRC_LPDR_TOUT		(1 << 21)
 #define INTSRC_FRAME_DONE		(1 << 24)
 #define INTSRC_PLL_STABLE		(1 << 31)
 
@@ -132,6 +136,7 @@
 
 /* S5P_DSIM_FIFOCTRL */
 #define SFR_HEADER_EMPTY		(1 << 22)
+#define SFR_RX_EMPTY			(1 << 24)
 
 /* S5P_DSIM_PHYACCHR */
 #define DSIM_AFC_CTL(x)			(((x) & 0x7) << 5)

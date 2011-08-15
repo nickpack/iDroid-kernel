@@ -51,6 +51,14 @@
 #define DSIM_ESCCLK_ON		(0x0)
 #define DSIM_ESCCLK_OFF		(0x1)
 
+#define DEBUG_DSIM_COMMON
+
+#ifdef DEBUG_DSIM_COMMON
+#define dbg_printk(x...) printk(x)
+#else
+#define dbg_printk(x...)
+#endif
+
 /* MIPI-DSIM status types. */
 enum {
 	DSIM_STATE_INIT,	/* should be initialized. */
@@ -77,6 +85,8 @@ static void s5p_mipi_dsi_long_data_wr(struct mipi_dsim_device *dsim,
 		unsigned int data0, unsigned int data1)
 {
 	unsigned int data_cnt = 0, payload = 0;
+
+	dbg_printk("%s.\n", __func__);
 
 	/* in case that data count is more then 4 */
 	for (data_cnt = 0; data_cnt < data1; data_cnt += 4) {
@@ -124,12 +134,14 @@ static void s5p_mipi_dsi_long_data_wr(struct mipi_dsim_device *dsim,
 	}
 }
 
-int s5p_mipi_dsi_wr_data(struct mipi_dsim_device *dsim, unsigned int data_id,
-	unsigned int data0, unsigned int data1)
+int s5p_mipi_dsi_rd_data(struct mipi_dsim_device *dsim, unsigned int data_id,
+	unsigned int data0, unsigned int data1, void *buffer, size_t size)
 {
 	unsigned int timeout = TRY_GET_FIFO_TIMEOUT;
 	unsigned long delay_val, udelay;
 	unsigned int check_rx_ack = 0;
+
+	dbg_printk("%s.\n", __func__);
 
 	if (dsim->state == DSIM_STATE_ULPS) {
 		dev_err(dsim->dev, "state is ULPS.\n");
@@ -197,8 +209,10 @@ int s5p_mipi_dsi_wr_data(struct mipi_dsim_device *dsim, unsigned int data_id,
 	case MIPI_DSI_GENERIC_READ_REQUEST_2_PARAM:
 	case MIPI_DSI_DCS_READ:
 		s5p_mipi_dsi_clear_all_interrupt(dsim);
+		dsim->rx_buffer = buffer;
+		dsim->rx_size = size;
 		s5p_mipi_dsi_wr_tx_header(dsim, data_id, data0, data1);
-		/* process response func should be implemented. */
+		wait_for_completion(&dsim->rx_completion);
 		return 0;
 
 	/* long packet type and null packet */
@@ -261,9 +275,17 @@ int s5p_mipi_dsi_wr_data(struct mipi_dsim_device *dsim, unsigned int data_id,
 	return 0;
 }
 
+int s5p_mipi_dsi_wr_data(struct mipi_dsim_device *dsim, unsigned int data_id,
+	unsigned int data0, unsigned int data1)
+{
+	return s5p_mipi_dsi_rd_data(dsim, data_id, data0, data1, NULL, 0);
+}
+
 int s5p_mipi_dsi_pll_on(struct mipi_dsim_device *dsim, unsigned int enable)
 {
 	int sw_timeout;
+
+	dbg_printk("%s.\n", __func__);
 
 	if (enable) {
 		sw_timeout = 1000;
@@ -289,6 +311,8 @@ unsigned long s5p_mipi_dsi_change_pll(struct mipi_dsim_device *dsim,
 {
 	unsigned long dfin_pll, dfvco, dpll_out;
 	unsigned int i, freq_band = 0xf;
+
+	dbg_printk("%s.\n", __func__);
 
 	dfin_pll = (FIN_HZ / pre_divider);
 
@@ -373,6 +397,8 @@ int s5p_mipi_dsi_set_clock(struct mipi_dsim_device *dsim,
 	unsigned int esc_div;
 	unsigned long esc_clk_error_rate;
 	unsigned long hs_clk = 0, byte_clk = 0, escape_clk = 0;
+
+	dbg_printk("%s.\n", __func__);
 
 	if (enable) {
 		dsim->e_clk_src = byte_clk_sel;
@@ -466,6 +492,8 @@ int s5p_mipi_dsi_init_dsim(struct mipi_dsim_device *dsim)
 {
 	dsim->state = DSIM_STATE_INIT;
 
+	dbg_printk("%s.\n", __func__);
+
 	switch (dsim->dsim_config->e_no_data_lane) {
 	case DSIM_DATA_LANE_1:
 		dsim->data_lane = DSIM_LANE_DATA0;
@@ -495,6 +523,8 @@ int s5p_mipi_dsi_init_dsim(struct mipi_dsim_device *dsim)
 int s5p_mipi_dsi_enable_frame_done_int(struct mipi_dsim_device *dsim,
 	unsigned int enable)
 {
+
+	dbg_printk("%s.\n", __func__);
 	/* enable only frame done interrupt */
 	s5p_mipi_dsi_set_interrupt_mask(dsim, INTMSK_FRAME_DONE, enable);
 
@@ -506,6 +536,8 @@ int s5p_mipi_dsi_set_display_mode(struct mipi_dsim_device *dsim,
 {
 	struct s5p_platform_mipi_dsim *dsim_pd;
 	struct fb_videomode *lcd_video = NULL;
+
+	dbg_printk("%s.\n", __func__);
 
 	dsim_pd = (struct s5p_platform_mipi_dsim *)dsim->pd;
 	lcd_video = (struct fb_videomode *)dsim_pd->lcd_panel_info;
@@ -540,8 +572,13 @@ int s5p_mipi_dsi_init_link(struct mipi_dsim_device *dsim)
 {
 	unsigned int time_out = 100;
 
+	dbg_printk("%s.\n", __func__);
+
 	switch (dsim->state) {
 	case DSIM_STATE_INIT:
+		/* set clock configuration */
+		s5p_mipi_dsi_set_clock(dsim, dsim->dsim_config->e_byte_clk, 1);
+
 		s5p_mipi_dsi_sw_reset(dsim);
 
 		s5p_mipi_dsi_init_fifo_pointer(dsim, 0x1f);
@@ -550,9 +587,6 @@ int s5p_mipi_dsi_init_link(struct mipi_dsim_device *dsim)
 		s5p_mipi_dsi_init_config(dsim);
 		s5p_mipi_dsi_enable_lane(dsim, DSIM_LANE_CLOCK, 1);
 		s5p_mipi_dsi_enable_lane(dsim, dsim->data_lane, 1);
-
-		/* set clock configuration */
-		s5p_mipi_dsi_set_clock(dsim, dsim->dsim_config->e_byte_clk, 1);
 
 		/* check clock and data lane state are stop state */
 		while (!(s5p_mipi_dsi_is_lane_state(dsim))) {
@@ -594,6 +628,8 @@ int s5p_mipi_dsi_init_link(struct mipi_dsim_device *dsim)
 
 int s5p_mipi_dsi_set_hs_enable(struct mipi_dsim_device *dsim)
 {
+	dbg_printk("%s.\n", __func__);
+
 	if (dsim->state == DSIM_STATE_STOP) {
 		if (dsim->e_clk_src != DSIM_EXT_CLK_BYPASS) {
 			dsim->state = DSIM_STATE_HSCLKEN;
@@ -617,6 +653,8 @@ int s5p_mipi_dsi_set_hs_enable(struct mipi_dsim_device *dsim)
 int s5p_mipi_dsi_set_data_transfer_mode(struct mipi_dsim_device *dsim,
 		unsigned int mode)
 {
+	dbg_printk("%s.\n", __func__);
+
 	if (mode) {
 		if (dsim->state != DSIM_STATE_HSCLKEN) {
 			dev_err(dsim->dev, "HS Clock lane is not enabled.\n");
@@ -640,13 +678,16 @@ int s5p_mipi_dsi_set_data_transfer_mode(struct mipi_dsim_device *dsim,
 
 int s5p_mipi_dsi_get_frame_done_status(struct mipi_dsim_device *dsim)
 {
+	dbg_printk("%s.\n", __func__);
+
 	return _s5p_mipi_dsi_get_frame_done_status(dsim);
 }
 
 int s5p_mipi_dsi_clear_frame_done(struct mipi_dsim_device *dsim)
 {
-	_s5p_mipi_dsi_clear_frame_done(dsim);
+	dbg_printk("%s.\n", __func__);
 
+	_s5p_mipi_dsi_clear_frame_done(dsim);
 	return 0;
 }
 

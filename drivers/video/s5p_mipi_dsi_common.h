@@ -16,6 +16,8 @@
 
 int s5p_mipi_dsi_wr_data(struct mipi_dsim_device *dsim, unsigned int data_id,
 	unsigned int data0, unsigned int data1);
+int s5p_mipi_dsi_rd_data(struct mipi_dsim_device *dsim, unsigned int data_id,
+	unsigned int data0, unsigned int data1, void *buffer, size_t size);
 int s5p_mipi_dsi_pll_on(struct mipi_dsim_device *dsim, unsigned int enable);
 unsigned long s5p_mipi_dsi_change_pll(struct mipi_dsim_device *dsim,
 	unsigned int pre_divider, unsigned int main_divider,

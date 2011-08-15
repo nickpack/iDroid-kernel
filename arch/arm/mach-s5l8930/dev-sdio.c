@@ -1,4 +1,5 @@
 /**
+ *
  * Copyright (c) 2011 Richard Ian Taylor.
  *
  * This file is part of the iDroid Project. (http://www.idroidproject.org).
@@ -8,10 +9,14 @@
  * published by the Free Software Foundation.
  */
 
-#ifndef  _S5L8930_MEMORY_
-#define  _S5L8930_MEMORY_
+#include <plat/sdhci.h>
 
-#define PLAT_PHYS_OFFSET	UL(0)
-#define CONSISTENT_DMA_SIZE	SZ_4M
+static const char *sdio0_clocks[] = {
+	"sdio",
+	NULL,
+	NULL,
+	NULL,
+};
 
-#endif //_S5L8930_MEMORY_
+static struct s3c_sdhci_platdata sdio0_pdata = {
+};
