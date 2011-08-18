@@ -54,6 +54,8 @@
 #define DEBUG_DSIM_COMMON
 
 #ifdef DEBUG_DSIM_COMMON
+#undef dev_dbg
+#define dev_dbg dev_info
 #define dbg_printk(x...) printk(x)
 #else
 #define dbg_printk(x...)
@@ -80,6 +82,89 @@ static unsigned int dpll_table[15] = {
 	100, 120, 170, 220, 270,
 	320, 390, 450, 510, 560,
 	640, 690, 770, 870, 950 };
+
+static void s5p_mipi_dsi_stop(struct mipi_dsim_device *dsim)
+{
+	s5p_mipi_dsi_force_dphy_stop_state(dsim, 1);
+	udelay(1000);
+	s5p_mipi_dsi_force_dphy_stop_state(dsim, 0);
+}
+
+static int s5p_mipi_dsi_enable_ulps(struct mipi_dsim_device *dsim, int _en)
+{
+	unsigned long time_out = 100;
+
+	s5p_mipi_dsi_set_cpu_transfer_mode(dsim, 1);
+
+	if(_en)
+	{
+		s5p_mipi_dsi_stop(dsim);
+
+		/* check clock and data lane state are stop state */
+		while (!(s5p_mipi_dsi_is_lane_state(dsim))) {
+			time_out--;
+			if (time_out == 0) {
+				dev_err(dsim->dev,
+					"DSI Master is not stop state.\n");
+				dev_err(dsim->dev,
+					"Check initialization process\n");
+
+				return -EINVAL;
+			}
+		}
+	}
+	else
+	{
+		while(!(s5p_mipi_dsi_ulps_ready(dsim, !_en)))
+		{
+			time_out --;
+			msleep(1);
+		}
+	}
+
+	s5p_mipi_dsi_set_ulps(dsim, _en);
+
+	time_out = 100;
+	while (!(s5p_mipi_dsi_ulps_ready(dsim, _en)))
+	{
+		time_out --;
+		msleep(1);
+	}
+
+	if(_en)
+	{
+		s5p_mipi_dsi_enable_lane(dsim, DSIM_LANE_CLOCK, 1);
+		s5p_mipi_dsi_enable_lane(dsim, dsim->data_lane, 1);
+	}
+	else
+	{
+		writel(readl(dsim->reg_base + S5P_DSIM_ESCMODE) &~ 0x5, dsim->reg_base + S5P_DSIM_ESCMODE);
+		udelay(1000);
+		writel(readl(dsim->reg_base + S5P_DSIM_ESCMODE) &~ 0xa, dsim->reg_base + S5P_DSIM_ESCMODE);
+
+		time_out = 100;
+		/* check clock and data lane state are stop state */
+		while (!(s5p_mipi_dsi_is_lane_state(dsim))) {
+			time_out--;
+			if (time_out == 0) {
+				dev_err(dsim->dev,
+					"DSI Master is not stop state.\n");
+				dev_err(dsim->dev,
+					"Check initialization process\n");
+
+				return -EINVAL;
+			}
+		}
+
+		s5p_mipi_dsi_set_cpu_transfer_mode(dsim, 1);
+	}
+
+	if(_en)
+		dsim->state = DSIM_STATE_ULPS;
+	else
+		dsim->state = DSIM_STATE_STOP;
+	return 0;
+}
 
 static void s5p_mipi_dsi_long_data_wr(struct mipi_dsim_device *dsim,
 		unsigned int data0, unsigned int data1)
@@ -133,6 +218,8 @@ static void s5p_mipi_dsi_long_data_wr(struct mipi_dsim_device *dsim,
 		}
 	}
 }
+
+extern irqreturn_t s5p_mipi_dsi_interrupt_handler(int irq, void *dev_id); // TODO REMOVE HAX
 
 int s5p_mipi_dsi_rd_data(struct mipi_dsim_device *dsim, unsigned int data_id,
 	unsigned int data0, unsigned int data1, void *buffer, size_t size)
@@ -212,7 +299,10 @@ int s5p_mipi_dsi_rd_data(struct mipi_dsim_device *dsim, unsigned int data_id,
 		dsim->rx_buffer = buffer;
 		dsim->rx_size = size;
 		s5p_mipi_dsi_wr_tx_header(dsim, data_id, data0, data1);
-		wait_for_completion(&dsim->rx_completion);
+		//wait_for_completion(&dsim->rx_completion);
+		while(!completion_done(&dsim->rx_completion))
+			s5p_mipi_dsi_interrupt_handler(0, dsim);
+
 		return 0;
 
 	/* long packet type and null packet */
@@ -446,7 +536,7 @@ int s5p_mipi_dsi_set_clock(struct mipi_dsim_device *dsim,
 			escape_clk, byte_clk, esc_div);
 
 		/* enable escape clock. */
-		s5p_mipi_dsi_enable_byte_clock(dsim, DSIM_ESCCLK_ON);
+		s5p_mipi_dsi_enable_byte_clock(dsim, 0);
 
 		/* enable byte clk and escape clock */
 		s5p_mipi_dsi_set_esc_clk_prs(dsim, 1, esc_div);
@@ -544,21 +634,23 @@ int s5p_mipi_dsi_set_display_mode(struct mipi_dsim_device *dsim,
 
 	/* in case of VIDEO MODE (RGB INTERFACE), it sets polarities. */
 	if (dsim->dsim_config->e_interface == (u32) DSIM_VIDEO) {
-		if (dsim->dsim_config->auto_vertical_cnt == 0) {
+		//if (dsim->dsim_config->auto_vertical_cnt == 0) {
 			s5p_mipi_dsi_set_main_disp_vporch(dsim,
+				lcd_video->flag,
 				lcd_video->upper_margin,
-				lcd_video->lower_margin, 0);
+				lcd_video->lower_margin);
 			s5p_mipi_dsi_set_main_disp_hporch(dsim,
 				lcd_video->left_margin,
 				lcd_video->right_margin);
 			s5p_mipi_dsi_set_main_disp_sync_area(dsim,
 				lcd_video->vsync_len,
 				lcd_video->hsync_len);
-		}
+		//}
 	}
 
 	s5p_mipi_dsi_set_main_disp_resol(dsim, lcd_video->xres,
 			lcd_video->yres);
+	s5p_mipi_dsi_set_sub_disp_resol(dsim, 0, 10);
 
 	s5p_mipi_dsi_display_config(dsim, dsim->dsim_config);
 
@@ -616,6 +708,9 @@ int s5p_mipi_dsi_init_link(struct mipi_dsim_device *dsim)
 			dsim->dsim_config->bta_timeout);
 		s5p_mipi_dsi_set_lpdr_timeout(dsim,
 			dsim->dsim_config->rx_timeout);
+
+		s5p_mipi_dsi_enable_ulps(dsim, 1);
+		s5p_mipi_dsi_enable_ulps(dsim, 0);
 
 		return 0;
 	default:

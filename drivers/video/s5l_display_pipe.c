@@ -20,6 +20,8 @@
 #include <plat/display-pipe.h>
 #include <mach/regs-display-pipe.h>
 
+//#define DISPLAY_PIPE_DUMP_DEGISTERS
+
 struct s5l_display_pipe_ui
 {
 	struct s5l_display_pipe_state *state;
@@ -48,17 +50,35 @@ static unsigned long display_pipe_ui_bits[] = {
 
 static struct fb_ops display_pipe_fb_ops = {
 	.owner		= THIS_MODULE,
-//	.fb_open	= display_pipe_fb_open,
-//	.fb_release	= display_pipe_fb_release,
-//	.fb_check_var	= display_pipe_fb_check_var,
-//	.fb_set_par	= fb_set_par,
-//	.fb_set_var	= display_pipe_fb_set_var,
-//	.fb_blank	= fb_blank,
 	.fb_fillrect	= cfb_fillrect,
 	.fb_copyarea	= cfb_copyarea,
 	.fb_imageblit	= cfb_imageblit,
-//	.fb_pan_display	= fb_pan_display,
 };
+
+#ifdef DISPLAY_PIPE_DUMP_REGISTERS
+static void display_pipe_dump_registers(struct s5l_display_pipe_state *_state)
+{
+	int i;
+
+	printk("Display Pipe regs:\n");
+
+	printk("control regs:\n");
+	for(i = 0; i < 24; i++)
+		printk("0x%08x: 0x%08x\n", _state->regs + 0x1000 + (i*4), readl(_state->regs + 0x1000 + (i*4)));
+
+	printk("blend regs:\n");
+	for(i = 0; i < 26; i++)
+		printk("0x%08x: 0x%08x\n", _state->regs + 0x1000 + (i*4), readl(_state->regs + 0x2000 + (i*4)));
+
+	printk("ui0 regs:\n");
+	for(i = 0; i < 31; i++)
+		printk("0x%08x: 0x%08x\n", _state->regs + 0x1000 + (i*4), readl(_state->regs + 0x4000 + (i*4)));
+
+	printk("ui1 regs:\n");
+	for(i = 0; i < 31; i++)
+		printk("0x%08x: 0x%08x\n", _state->regs + 0x1000 + (i*4), readl(_state->regs + 0x5000 + (i*4)));
+}
+#endif
 
 struct resource *display_pipe_get_resource(struct s5l_display_pipe_info *_info, unsigned int _type, int _idx)
 {
@@ -113,14 +133,12 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 		fbinfo->flags		= FBINFO_FLAG_DEFAULT;
 		fbinfo->pseudo_palette  = &ui->pseudo_palette;
 
-		fbinfo->var.red.offset = 24;
+		fbinfo->var.red.offset = 16;
 		fbinfo->var.red.length = 8;
-		fbinfo->var.green.offset = 16;
+		fbinfo->var.green.offset = 8;
 		fbinfo->var.green.length = 8;
-		fbinfo->var.blue.offset = 8;
+		fbinfo->var.blue.offset = 0,
 		fbinfo->var.blue.length = 8;
-		fbinfo->var.transp.offset = 0;
-		fbinfo->var.transp.length = 8;
 	}
 	else
 		fbinfo = ui->info;
@@ -165,6 +183,8 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 		if(!ui->buffer)
 			printk(KERN_ERR "display_pipe: failed to allocate framebuffer!\n");
 
+		memset(ui->buffer, 0, fbinfo->fix.smem_len);
+
 		writel(addr, ui->regs + S5L_DPUIBUF);
 		writel(((_width * (_bpp/8)) &~ 0x3F) | 2, ui->regs + S5L_DPUILEN);
 		writel(0, ui->regs + S5L_DPUIUNK0);
@@ -176,6 +196,7 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 		writel(0xFFFF0202, _state->regs + S5L_DPUI0ALPH); // TODO: Figure out this for UI-1.
 
 		fbinfo->fix.smem_start = addr;
+		fbinfo->screen_base = ui->buffer;
 		fbinfo->var.xres_virtual = fbinfo->var.xres = _width;
 		fbinfo->var.yres_virtual = fbinfo->var.yres = _height;
 	}
@@ -256,14 +277,18 @@ static int display_pipe_probe(struct platform_device *_dev)
 	writel(0x13880801, state->regs + 0x105C);
 	writel(0xBFF00000, state->regs + S5L_DPUNDERC);
 
-	if(info->driver->init)
+	/*if(info->driver->init)
 	{
 		ret = info->driver->init(state);
 		if(ret < 0)
 			goto fail_drv;
-	}
+	}*/
 
 	display_pipe_configure_window(state, 0, info->width, info->height, 32); // Framebuffer is always RGB888
+
+#ifdef DISPLAY_PIPE_DUMP_REGISTERS
+	display_pipe_dump_registers(state);
+#endif
 
 	printk("display-pipe: %s registered!\n", info->driver->name);
 

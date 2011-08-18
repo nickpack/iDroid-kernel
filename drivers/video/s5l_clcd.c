@@ -21,6 +21,8 @@
 
 #include <mach/regs-clcd.h>
 
+#include "s5p_mipi_dsi_lowlevel.h"
+
 typedef struct s5l_display_pipe_state *dp_t;
 struct clcd_state
 {
@@ -67,7 +69,7 @@ static int s5l_clcd_dev_probe(struct mipi_dsim_lcd_device *_dev)
 	dsim->master_ops->cmd_write(dsim, 5, 0, 0);
 	udelay(10);
 
-	/*if(dsim->master_ops->cmd_read(dsim, 0x14, 0xb1, 0,
+	if(dsim->master_ops->cmd_read(dsim, 0x14, 0xb1, 0,
 			&buffer, sizeof(buffer)) >= 0)
 	{
 		panel_id = buffer[0] << 24
@@ -85,10 +87,8 @@ static int s5l_clcd_dev_probe(struct mipi_dsim_lcd_device *_dev)
 		printk(KERN_INFO "clcd: backlight calibration = 0x%08x\n", backlight_cal);
 	}
 	else
-		printk(KERN_ERR "%s: failed to read panel id.\n", __func__);*/
+		printk(KERN_ERR "%s: failed to read panel id.\n", __func__);
 
-	//display_pipe_configure_window(state->dp, 0,
-	//		state->dp->info->width, state->dp->info->height, 32); // Framebuffer is always RGB888
 	s5l_clcd_enable_framebuffer(state, true);
 	udelay(100);
 
@@ -97,8 +97,22 @@ static int s5l_clcd_dev_probe(struct mipi_dsim_lcd_device *_dev)
 	dsim->master_ops->cmd_write(dsim, 5, 0x29, 0);
 	s5l_clcd_frame_sleep(state, 7);
 
+	s5p_mipi_dsi_enable_hs_clock(dsim, 1);
+
 	if(state->info->pull_pin != -1)
 		s3c_gpio_setpull(state->info->pull_pin, S3C_GPIO_PULL_NONE);
+
+	{
+		int i;
+
+		printk("CLCD regs:\n");
+		for(i = 0; i < 25; i++)
+			printk("0x%08x: 0x%08x\n", state->regs + (i*4), readl(state->regs + (i*4)));
+
+		printk("MIPI DSIM regs:\n");
+		for(i = 0; i < 24; i++)
+			printk("0x%08x: 0x%08x\n", dsim->reg_base + (i*4), readl(dsim->reg_base + (i*4)));
+	}
 
 	return 0;
 }

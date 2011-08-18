@@ -30,21 +30,21 @@ static struct mipi_dsim_config dsim_config = {
 	.e_interface = DSIM_VIDEO,
 	.e_pixel_format = DSIM_24BPP_888,
 	.e_no_data_lane = DSIM_DATA_LANE_3,
+	.e_burst_mode = DSIM_BURST,
+
+	.auto_vertical_cnt = 1,
+	.hse = 1,
 
 	.bta_timeout = 0xFF,
 	.rx_timeout = 0xFFFF,
 
-	.pll_stable_time = 300000,
-};
+	.esc_clk = 10687500,
 
-static struct fb_videomode videomode = {
-	.xres = 640,
-	.yres = 960,
+	.pll_stable_time = 300000,
 };
 
 static struct s5p_platform_mipi_dsim dsim_data = {
 	.dsim_config = &dsim_config,
-	.lcd_panel_info = &videomode,
 	.mipi_power = s5p_mipi_dsi_dphy_power,
 	.phy_enable = s5p_dsim_phy_enable,
 };
@@ -61,16 +61,14 @@ static struct platform_device mipi_dev = {
 	},
 };
 
-int s5l8930_register_mipi_dsim(int _w, int _h, int _p, int _m, int _s, int _lanes)
+int s5l8930_register_mipi_dsim(struct fb_videomode *_vmode, int _p, int _m, int _s, int _lanes)
 {
 	dsim_config.p = _p;
 	dsim_config.m = _m;
 	dsim_config.s = _s;
 
 	dsim_config.e_no_data_lane = _lanes;
-
-	videomode.xres = _w;
-	videomode.yres = _h;
+	dsim_data.lcd_panel_info = _vmode;
 
 	return platform_device_register(&mipi_dev);
 }
