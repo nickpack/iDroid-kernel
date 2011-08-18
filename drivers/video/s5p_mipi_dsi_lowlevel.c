@@ -127,7 +127,7 @@ void s5p_mipi_dsi_set_main_disp_vporch(struct mipi_dsim_device *dsim,
 {
 	unsigned int reg;
 
-	dbg_printk("%s\n", __func__);
+	dbg_printk("%s(%x, %x, %x)\n", __func__, cmd_allow, vfront, vback);
 
 	reg = (readl(dsim->reg_base + S5P_DSIM_MVPORCH)) &
 		~(DSIM_CMD_ALLOW_MASK) & ~(DSIM_STABLE_VFP_MASK) &
@@ -174,12 +174,12 @@ void s5p_mipi_dsi_set_main_disp_sync_area(struct mipi_dsim_device *dsim,
 void s5p_mipi_dsi_set_sub_disp_resol(struct mipi_dsim_device *dsim,
 	unsigned int vert, unsigned int hori)
 {
-	unsigned int reg;
+	unsigned int reg = 0;
 
 	dbg_printk("%s\n", __func__);
 
-	reg = (readl(dsim->reg_base + S5P_DSIM_SDRESOL)) &
-		~(DSIM_SUB_STANDY_MASK);
+	//reg = (readl(dsim->reg_base + S5P_DSIM_SDRESOL)) &
+	//	~(DSIM_SUB_STANDY_MASK);
 
 	writel(reg, dsim->reg_base + S5P_DSIM_SDRESOL);
 
@@ -188,7 +188,8 @@ void s5p_mipi_dsi_set_sub_disp_resol(struct mipi_dsim_device *dsim,
 		((hori & 0x7ff) << DSIM_SUB_HRESOL_SHIFT);
 	writel(reg, dsim->reg_base + S5P_DSIM_SDRESOL);
 
-	reg |= (1 << DSIM_SUB_STANDY_SHIFT);
+	if(vert && hori)
+		reg |= (1 << DSIM_SUB_STANDY_SHIFT);
 	writel(reg, dsim->reg_base + S5P_DSIM_SDRESOL);
 }
 
@@ -208,7 +209,10 @@ void s5p_mipi_dsi_init_config(struct mipi_dsim_device *dsim)
 		(dsim_config->hfp << DSIM_HFP_MODE_SHIFT) |
 		(dsim_config->hbp << DSIM_HBP_MODE_SHIFT) |
 		(dsim_config->hsa << DSIM_HSA_MODE_SHIFT) |
-		(dsim_config->e_no_data_lane << DSIM_NUM_OF_DATALANE_SHIFT);
+		((dsim_config->e_no_data_lane-1) << DSIM_NUM_OF_DATALANE_SHIFT);
+
+	if(dsim_config->e_burst_mode == DSIM_BURST)
+		cfg |= (1 << 26) | (1 << 27); // I added the (1 << 27), it's supposedly invalid. -- Ricky26
 
 	writel(cfg, dsim->reg_base + S5P_DSIM_CONFIG);
 }
@@ -381,7 +385,7 @@ void s5p_mipi_dsi_enable_byte_clock(struct mipi_dsim_device *dsim,
 
 	dbg_printk("%s\n", __func__);
 
-	reg |= enable << DSIM_BYTE_CLKEN_SHIFT;
+	reg |= (!enable) << DSIM_BYTE_CLKEN_SHIFT;
 
 	writel(reg, dsim->reg_base + S5P_DSIM_CLKCTRL);
 }
@@ -450,6 +454,19 @@ unsigned int s5p_mipi_dsi_is_lane_state(struct mipi_dsim_device *dsim)
 		return 0;
 
 	return 0;
+}
+
+unsigned int s5p_mipi_dsi_ulps_ready(struct mipi_dsim_device *dsim, int _en)
+{
+	u32 reg = readl(dsim->reg_base + S5P_DSIM_STATUS);
+	u32 desired = DSIM_ULPS_STATE_CLK
+		| DSIM_ULPS_STATE_DAT(dsim->data_lane);
+	u32 val = (_en) ? desired: 0;
+
+	if((reg & desired) != val)
+		return 0;
+
+	return 1;
 }
 
 void s5p_mipi_dsi_set_stop_state_counter(struct mipi_dsim_device *dsim,
@@ -661,4 +678,26 @@ void s5p_mipi_dsi_wait_for_rx_fifo(struct mipi_dsim_device *dsim)
 		barrier();
 		fifoctl = readl(dsim->reg_base + S5P_DSIM_FIFOCTRL);
 	}
+}
+
+void s5p_mipi_dsi_set_ulps(struct mipi_dsim_device *dsim, int _en)
+{
+	unsigned int reg = readl(dsim->reg_base + S5P_DSIM_ESCMODE);
+
+	dbg_printk("%s\n", __func__);
+
+	reg &=~ (DSIM_TX_UIPS_CLK_EXIT
+		| DSIM_TX_UIPS_CLK
+		| DSIM_TX_UIPS_EXIT
+		| DSIM_TX_UIPS_DAT);
+
+	if(_en)
+		reg |= DSIM_TX_UIPS_CLK
+			| DSIM_TX_UIPS_DAT;
+	else
+		reg |= DSIM_TX_UIPS_CLK_EXIT
+			| DSIM_TX_UIPS_EXIT;
+
+	writel(reg, dsim->reg_base +
+		S5P_DSIM_ESCMODE);
 }

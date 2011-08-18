@@ -68,7 +68,8 @@ static struct s5p_platform_mipi_dsim *to_dsim_plat(struct platform_device *pdev)
 	return (struct s5p_platform_mipi_dsim *)pdev->dev.platform_data;
 }
 
-static irqreturn_t s5p_mipi_dsi_interrupt_handler(int irq, void *dev_id)
+//static
+ irqreturn_t s5p_mipi_dsi_interrupt_handler(int irq, void *dev_id)
 {
 	struct mipi_dsim_device *dsim = dev_id;
 	u32 intsrc = readl(dsim->reg_base + S5P_DSIM_INTSRC);
@@ -438,7 +439,7 @@ static int s5p_mipi_dsi_probe(struct platform_device *pdev)
 	if (dsim_config->e_interface == DSIM_VIDEO) {
 		dsim->irq = platform_get_irq(pdev, 0);
 		if (request_irq(dsim->irq, s5p_mipi_dsi_interrupt_handler,
-				IRQF_DISABLED, "mipi-dsi", dsim)) {
+				IRQF_DISABLED | IRQF_TRIGGER_HIGH, "mipi-dsi", dsim)) {
 			dev_err(&pdev->dev, "request_irq failed.\n");
 			goto err_request_irq;
 		}

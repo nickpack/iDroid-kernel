@@ -56,12 +56,12 @@ static struct platform_device clcd_dev = {
 	},
 };
 
-int s5l8930_register_clcd(int _w, int _h, int _bpp, int _freq, struct s5l_clcd_info *_info)
+int s5l8930_register_clcd(struct fb_videomode *_vid, int _bpp, struct s5l_clcd_info *_info)
 {
-	dp_info.width = _w;
-	dp_info.height = _h;
+	dp_info.width = _vid->xres;
+	dp_info.height = _vid->yres;
 	dp_info.bpp = _bpp;
-	dp_info.clock_frequency = _freq;
+	dp_info.clock_frequency = _vid->pixclock;
 	dp_info.pdata = _info;
 
 	return platform_device_register(&clcd_dev);

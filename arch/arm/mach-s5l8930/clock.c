@@ -1249,6 +1249,8 @@ static struct clk *clocks_init[] = {
 	&clk_uart0, // Used for debugging
 	&clk_uclk0,
 	&clk_xusbxti,
+	&clk_mipi_dsi, // Once fixed, deal with this
+	&clk_clcd, // Ditto
 };
 
 static struct clk *clocks_disable[] = {
@@ -1286,9 +1288,7 @@ static struct clk *clocks_disable[] = {
 	&clk_jpeg,
 	&clk_venc,
 	&clk_mipi_csi,
-	&clk_mipi_dsi,
 	&clk_smia,
-	&clk_clcd,
 	&clk_rgbout,
 	&clk_tvout,
 	&clk_scaler,

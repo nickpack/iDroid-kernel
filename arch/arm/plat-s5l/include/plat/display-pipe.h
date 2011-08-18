@@ -92,8 +92,8 @@ int display_pipe_set_framebuffer(struct s5l_display_pipe_state *_state, u32 _idx
 int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _idx,
 	u32 _width, u32 _height, u8 _bpp);
 
-int s5l8930_register_mipi_dsim(int _w, int _h, int _p, int _m, int _s, int _lanes);
-int s5l8930_register_clcd(int _w, int _h, int _bpp, int _freq, struct s5l_clcd_info *_info);
+int s5l8930_register_mipi_dsim(struct fb_videomode *_md, int _p, int _m, int _s, int _lanes);
+int s5l8930_register_clcd(struct fb_videomode *_md, int _bpp, struct s5l_clcd_info *_info);
 
 #endif //S5L_DISPLAY_PIPE_H
 

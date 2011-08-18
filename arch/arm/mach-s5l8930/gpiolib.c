@@ -472,9 +472,9 @@ static __init int s5l8930_gpio_setup(void)
 
 	for(i = 0; i < ARCH_NR_GPIOS; i++)
 	{
-		s5l8930_gpio_cache[i] = s5l8930_gpio_reset[i];
+		/*s5l8930_gpio_cache[i] = s5l8930_gpio_reset[i];
 		__raw_writel(s5l8930_gpio_reset[i],
-				VA_GPIO + S5L_GPIO_PIN(i));
+				VA_GPIO + S5L_GPIO_PIN(i));*/
 
 		irq_set_chip(IRQ_EINT(i), &s5l8930_gpioic);
 		set_irq_flags(IRQ_EINT(i), IRQF_VALID);

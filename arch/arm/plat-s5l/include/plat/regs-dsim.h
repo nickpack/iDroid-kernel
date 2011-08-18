@@ -46,6 +46,8 @@
 /* DSIM_STATUS */
 #define DSIM_STOP_STATE_DAT(x)	(((x) & 0xf) << 0)
 #define DSIM_STOP_STATE_CLK		(1 << 8)
+#define DSIM_ULPS_STATE_CLK		(1 << 9)
+#define DSIM_ULPS_STATE_DAT(x)	(((x) & 0xf) << 4)
 #define DSIM_TX_READY_HS_CLK	(1 << 10)
 #define DSIM_STATUS_SWRST		(1 << 20)
 
@@ -78,6 +80,7 @@
 #define DSIM_HBP_MODE_SHIFT		(21)
 #define DSIM_HFP_MODE_SHIFT		(22)
 #define DSIM_HSE_MODE_SHIFT		(23)
+#define DSIM_PULSE_MODE_SHIFT	(27)
 #define DSIM_AUTO_MODE_SHIFT		(24)
 #define DSIM_LANE_ENx(x)		(((x) & 0x1f) << 0)
 
@@ -90,6 +93,10 @@
 #define DSIM_CMD_LPDT_LP		(1 << DSIM_CMD_LPDT_SHIFT)
 #define DSIM_STOP_STATE_CNT_SHIFT	(21)
 #define DSIM_FORCE_STOP_STATE_SHIFT	(20)
+#define DSIM_TX_UIPS_CLK_EXIT    (1 << 0)
+#define DSIM_TX_UIPS_CLK         (1 << 1)
+#define DSIM_TX_UIPS_EXIT        (1 << 2)
+#define DSIM_TX_UIPS_DAT         (1 << 3)
 
 /* S5P_DSIM_MDRESOL */
 #define DSIM_MAIN_STAND_BY		(1 << 31)
@@ -139,6 +146,7 @@
 #define SFR_RX_EMPTY			(1 << 24)
 
 /* S5P_DSIM_PHYACCHR */
+#define DSIM_AFC_ENABLE			(1 << 14)
 #define DSIM_AFC_CTL(x)			(((x) & 0x7) << 5)
 
 /* S5P_DSIM_PLLCTRL */
