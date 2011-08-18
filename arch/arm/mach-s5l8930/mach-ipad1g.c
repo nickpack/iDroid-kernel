@@ -1,9 +1,29 @@
+/**
+ * Copyright (c) 2011 Richard Ian Taylor.
+ *
+ * This file is part of the iDroid Project. (http://www.idroidproject.org).
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#include <linux/device.h>
+#include <linux/types.h>
+#include <linux/platform_device.h>
+#include <linux/gpio_keys.h>
+#include <linux/input.h>
+#include <asm/mach-types.h>
 #include <asm/mach/arch.h>
+
+#include <plat/display-pipe.h>
+#include <plat/mipi_dsim.h>
+#include <plat/cpu.h>
 #include <mach/cpu.h>
 #include <mach/time.h>
-#include <asm/mach-types.h>
-#include <linux/platform_device.h>
-#include <plat/cpu.h>
+#include <mach/map.h>
+#include <mach/gpio.h>
+#include <mach/devices.h>
 
 static struct s5l_clcd_info clcd_info = {
 	.reset_pin = S5L8930_GPIO(0x1404),
