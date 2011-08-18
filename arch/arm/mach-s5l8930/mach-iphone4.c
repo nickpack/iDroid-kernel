@@ -5,11 +5,59 @@
 #include <linux/platform_device.h>
 #include <plat/cpu.h>
 
-static struct platform_device fbdev = {
-	.name = "s5l8920_fb",
+static struct s5l_clcd_info clcd_info = {
+	.reset_pin = S5L8930_GPIO(0x206),
+	.pull_pin = S5L8930_GPIO(0x207),
 
-	.dev = {
-		.platform_data = __phys_to_virt(0x1F700000),
+	.irq = IRQ_CLCD0,
+
+	.dot_pitch = 326,
+
+	.horizontal = { 71, 71, 73 },
+	.vertical = { 12, 12, 16 },
+};
+
+static struct fb_videomode video_mode = {
+	.xres = 640,
+	.yres = 960,
+
+	.pixclock = 51300000,
+
+	.left_margin = 15,
+	.right_margin = 14,
+	.upper_margin = 12,
+	.lower_margin = 12,
+
+	.hsync_len = 1,
+	.vsync_len = 16,
+
+	.flag = 0xD,
+};
+
+static struct gpio_keys_button buttons[] = {
+	[0] = {
+		.type = EV_KEY,
+		.code = KEY_ENTER,
+		.gpio = S5L8930_GPIO(0x7),
+		.desc = "Home",
+	},
+	[1] = {
+		.type = EV_KEY,
+		.code = KEY_ESC,
+		.gpio = S5L8930_GPIO(0x1),
+		.desc = "Hold",
+	},
+	[2] = {
+		.type = EV_KEY,
+		.code = KEY_VOLUMEUP,
+		.gpio = S5L8930_GPIO(0x2),
+		.desc = "Volume Up",
+	},
+	[3] = {
+		.type = EV_KEY,
+		.code = KEY_VOLUMEDOWN,
+		.gpio = S5L8930_GPIO(0x3),
+		.desc = "Volume Down",
 	},
 };
 
@@ -17,9 +65,9 @@ static void __init ip4_init(void)
 {
 	s5l8930_init();
 
-	//platform_device_register(&fbdev);
-
-	// TODO: Add ip4g devices here!
+	s5l8930_register_gpio_keys(buttons, ARRAY_SIZE(buttons));
+	s5l8930_register_mipi_dsim(&video_mode, 2, 57, 1, 3);
+	s5l8930_register_clcd(&video_mode, 24, &clcd_info);
 }
 
 MACHINE_START(IPHONE_4, "Apple iPhone 4")
