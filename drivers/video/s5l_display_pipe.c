@@ -48,8 +48,25 @@ static unsigned long display_pipe_ui_bits[] = {
 	S5L_DPCTL_UI1EN,
 };
 
+static int display_pipe_setcolreg(unsigned _idx,
+		unsigned _r, unsigned _g, unsigned _b, unsigned _a,
+		struct fb_info *_info)
+{
+	if(_idx < 16)
+	{
+		u32 *pal = _info->pseudo_palette;
+		pal[_idx] = (_r << 16) | (_b << 8) | _g;
+
+		return 0;
+	}
+
+	return 1;
+}
+
 static struct fb_ops display_pipe_fb_ops = {
 	.owner		= THIS_MODULE,
+
+	.fb_setcolreg	= display_pipe_setcolreg,
 	.fb_fillrect	= cfb_fillrect,
 	.fb_copyarea	= cfb_copyarea,
 	.fb_imageblit	= cfb_imageblit,
@@ -139,6 +156,11 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 		fbinfo->var.green.length = 8;
 		fbinfo->var.blue.offset = 0,
 		fbinfo->var.blue.length = 8;
+
+		if(fb_alloc_cmap(&fbinfo->cmap, 256, 0) == 0)
+			fb_set_cmap(&fbinfo->cmap, fbinfo);
+		else
+			printk(KERN_ERR "display_pipe: failed to allocate colour-map!\n");
 	}
 	else
 		fbinfo = ui->info;
@@ -183,7 +205,7 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 		if(!ui->buffer)
 			printk(KERN_ERR "display_pipe: failed to allocate framebuffer!\n");
 
-		memset(ui->buffer, 0, fbinfo->fix.smem_len);
+		memset(ui->buffer, 0xff, fbinfo->fix.smem_len);
 
 		writel(addr, ui->regs + S5L_DPUIBUF);
 		writel(((_width * (_bpp/8)) &~ 0x3F) | 2, ui->regs + S5L_DPUILEN);
