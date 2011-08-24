@@ -38,8 +38,8 @@ static struct s5l_clcd_info clcd_info = {
 };
 
 static struct fb_videomode video_mode = {
-	.xres = 768,
-	.yres = 1024,
+	.xres = 1024,
+	.yres = 768,
 
 	.pixclock = 68400000,
 
