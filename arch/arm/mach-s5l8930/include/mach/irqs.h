@@ -21,6 +21,9 @@
 #define IRQ_TIMER3	303
 #define IRQ_TIMER4	304
 
+#define IRQ_CDMA0	0x31
+#define IRQ_CDMA36	0x55
+
 #define IRQ_IIC		0x13
 #define IRQ_IIC1	0x14
 #define IRQ_IIC2	0x15
@@ -41,6 +44,9 @@
 #define IRQ_CLCD1		0x30
 #define IRQ_RGBOUT0		0x31
 #define IRQ_RGBOUT1		0x32
+
+#define IRQ_FMI0 0x22
+#define IRQ_FMI1 0x23
 
 #define IRQ_SPI0 0x1D
 #define IRQ_SPI1 0x1E

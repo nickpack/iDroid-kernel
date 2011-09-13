@@ -16,8 +16,9 @@
 #define S5L_DPOSIZE				(0x1030)
 #define S5L_DPCTL				(0x1038)
 
-#define S5L_DPCTL_UI0EN			(1 << 8)
-#define S5L_DPCTL_UI1EN			(1 << 9)
+#define S5L_DPCTL_UIxEN(x)		(1 << (8+(x)))
+#define S5L_DPCTL_UI0EN			(S5L_DPCTL_UIxEN(0))
+#define S5L_DPCTL_UI1EN			(S5L_DPCTL_UIxEN(1))
 
 #define S5L_DPCPFDMA			(0x104C)
 
@@ -32,8 +33,9 @@
 // Video Block
 
 // UI0/2 Block
-#define S5L_DPUI0				(0x4000)
-#define S5L_DPUI1				(0x5000)
+#define S5L_DPUIx(x)			(0x4000 + (0x1000*(x)))
+#define S5L_DPUI0				S5L_DPUIx(0)
+#define S5L_DPUI1				S5L_DPUIx(1)
 
 #define S5L_DPUICTL				(0x40)
 #define S5L_DPUIBUF				(0x44)

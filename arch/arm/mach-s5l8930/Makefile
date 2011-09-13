@@ -4,7 +4,7 @@
 #	(http://www.idroidproject.org/).
 
 obj-$(CONFIG_CPU_S5L8930)			+= cpu.o time.o clock.o dev-spi.o gpiolib.o setup-mipi.o
-obj-$(CONFIG_CPU_S5L8930)			+= dev-mipi-dsim.o dev-clcd.o dev-gpio-keys.o
+obj-$(CONFIG_CPU_S5L8930)			+= dev-mipi-dsim.o dev-clcd.o dev-gpio-keys.o dev-h2fmi.o
 
 obj-$(CONFIG_MACH_IPHONE_4)			+= mach-iphone4.o
 obj-$(CONFIG_MACH_IPOD_TOUCH_4G)		+= mach-ipodtouch4g.o
