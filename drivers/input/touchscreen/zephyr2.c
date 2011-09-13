@@ -1,51 +1,22 @@
-/*
- * arch/arm/mach-apple_iphone/spi.c - SPI functionality for the iPhone
+/**
+ * Copyright (c) 2011 Richard Ian Taylor.
+ * Portions (c) 2008 Yidou Wang
  *
- * Copyright (C) 2008 Yiduo Wang
+ * This file is part of the iDroid Project. (http://www.idroidproject.org).
  *
- * Portions Copyright (C) 2010 Patrick Wildt
- * Portions Copyright (C) 2010 Ricky Taylor
- *
- * This file is part of iDroid. An android distribution for Apple products.
- * For more information, please visit http://www.idroidproject.org/.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
  */
 
-#include <linux/module.h>
-#include <linux/delay.h>
-#include <linux/platform_device.h>
-#include <linux/firmware.h>
-#include <linux/input.h>
-#include <linux/interrupt.h>
 #include <linux/spi/spi.h>
-#include <mach/iphone-spi.h>
-#include <mach/gpio.h>
-#include <asm/setup.h>
-#include <asm/mach-types.h>
+#include <linux/firmware.h>
+#include <linux/delay.h>
+#include <linux/interrupt.h>
+#include <linux/input.h>
+#include <linux/gpio.h>
 
-#define ATAG_IPHONE_PROX_CAL   0x54411004
-#define ATAG_IPHONE_MT_CAL     0x54411005
-
-#ifdef CONFIG_IPHONE_2G
-#	define MT_GPIO_POWER 0x804
-#	define MT_ATN_INTERRUPT 0xa3
-#else
-#	define MT_GPIO_POWER 0x701
-#	define MT_ATN_INTERRUPT 0x9b
-#endif
+#include <plat/zephyr2.h>
 
 #define MT_INFO_FAMILYID 0xD1
 #define MT_INFO_SENSORINFO 0xD3
@@ -58,11 +29,6 @@
 
 #define NORMAL_SPEED (&MTNormalSpeed)
 #define FAST_SPEED (&MTFastSpeed)
-
-struct atag_iphone_cal_data {
-	u32 size;
-	u8  data[];
-};
 
 typedef struct MTFrameHeader
 {
@@ -83,7 +49,7 @@ typedef struct MTFrameHeader
 	u16 unk_12;
 	u16 unk_14;
 	u16 unk_16;
-} MTFrameHeader;
+} __attribute__((packed)) MTFrameHeader;
 
 typedef struct FingerData
 {
@@ -103,7 +69,7 @@ typedef struct FingerData
 	u16 unk_16;
 	u16 unk_18;
 	u16 unk_1A;
-} FingerData;
+} __attribute__((packed)) FingerData;
 
 typedef struct MTSPISetting
 {
@@ -117,10 +83,10 @@ const MTSPISetting MTFastSpeed = {4500000, 0, 5};
 
 struct zephyr2_data
 {
-	u8* OutputPacket;
-	u8* InputPacket;
-	u8* GetInfoPacket;
-	u8* GetResultPacket;
+	u8 OutputPacket[MAX_BUFFER_SIZE];
+	u8 InputPacket[MAX_BUFFER_SIZE];
+	u8 GetInfoPacket[MAX_BUFFER_SIZE];
+	u8 GetResultPacket[MAX_BUFFER_SIZE];
 
 	int InterfaceVersion;
 	int MaxPacketSize;
@@ -141,23 +107,17 @@ struct zephyr2_data
 
 	int CurNOP;
 
-	bool firmware_loaded;
+	int irq;
+
+	const struct firmware *firmware;
 
 	struct input_dev *input_dev;
+	struct spi_device *spi_dev;
 
 	int irq_count;
 	spinlock_t irq_lock;
 	struct work_struct irq_work;
-
-	struct spi_device *spi_dev;
 };
-
-static u8* constructed_fw = NULL;
-static size_t constructed_fw_size = 0;
-static u8 proxcal_fw[512];
-static size_t proxcal_fw_size = 0;
-static u8 cal_fw[512];
-static size_t cal_fw_size = 0;
 
 static int makeBootloaderDataPacket(u8* output, u32 destAddress, const u8* data, int dataLen, int* cksumOut);
 static void sendExecutePacket(struct zephyr2_data *_z2);
@@ -172,7 +132,7 @@ static bool getReport(struct zephyr2_data *_z2, int id, u8* buffer, int* outLen)
 
 static void newPacket(struct zephyr2_data *_z2, const u8* data, int len);
 
-static u32 zephyr2_getU32(u8 *_buf)
+static inline u32 zephyr2_getU32(u8 *_buf)
 {
 	return (_buf[2] << 24)
 		| (_buf[3] << 16)
@@ -180,38 +140,38 @@ static u32 zephyr2_getU32(u8 *_buf)
 		| _buf[1];
 }
 
-static void zephyr2_makeU32(u8 *_buf, u32 _val)
+static inline void zephyr2_makeU32(u8 *_buf, u32 _val)
 {
 	_buf[2] = _val >> 24;
 	_buf[3] = (_val >> 16) & 0xFF;
 	_buf[0] = (_val >> 8) & 0xFF;
 	_buf[1] = _val & 0xFF;
 }
-static u16 zephyr2_getU16(u8 *_buf)
+static inline u16 zephyr2_getU16(u8 *_buf)
 {
 	return (_buf[0] << 8)
 		| _buf[1];
 }
 
-static void zephyr2_makeU16(u8 *_buf, u16 _val)
+static inline void zephyr2_makeU16(u8 *_buf, u16 _val)
 {
 	_buf[0] = _val >> 8;
 	_buf[1] = _val & 0xFF;
 }
 
-static u16 zephyr2_getU16R(u8 *_buf)
+static inline u16 zephyr2_getU16R(u8 *_buf)
 {
 	return (_buf[1] << 8)
 		| _buf[0];
 }
 
-static void zephyr2_makeU16R(u8 *_buf, u16 _val)
+static inline void zephyr2_makeU16R(u8 *_buf, u16 _val)
 {
 	_buf[1] = _val >> 8;
 	_buf[0] = _val & 0xFF;
 }
 
-static u32 zephyr2_u32Sum(u8 *_buf, u32 _len)
+static inline u32 zephyr2_u32Sum(u8 *_buf, u32 _len)
 {
 	u32 i;
 	u32 checksum = 0;
@@ -224,7 +184,7 @@ static u32 zephyr2_u32Sum(u8 *_buf, u32 _len)
 	return checksum;
 }
 
-static u16 zephyr2_u16Sum(u8 *_buf, u32 _len)
+static inline u16 zephyr2_u16Sum(u8 *_buf, u32 _len)
 {
 	u32 i;
 	u16 checksum = 0;
@@ -237,28 +197,28 @@ static u16 zephyr2_u16Sum(u8 *_buf, u32 _len)
 	return checksum;
 }
 
-static u16 zephyr2_makeU16Sum(u8 *_buf, u32 _len)
+static inline u16 zephyr2_makeU16Sum(u8 *_buf, u32 _len)
 {
 	u16 chk = zephyr2_u16Sum(_buf, _len);
 	zephyr2_makeU16(_buf+_len, chk);
 	return chk;
 }
 
-static u16 zephyr2_makeU16SumR(u8 *_buf, u32 _len)
+static inline u16 zephyr2_makeU16SumR(u8 *_buf, u32 _len)
 {
 	u16 chk = zephyr2_u16Sum(_buf, _len);
 	zephyr2_makeU16R(_buf+_len, chk);
 	return chk;
 }
 
-static u32 zephyr2_makeU32Sum(u8 *_buf, u32 _len)
+static inline u32 zephyr2_makeU32Sum(u8 *_buf, u32 _len)
 {
 	u32 chk = zephyr2_u32Sum(_buf, _len);
 	zephyr2_makeU32(_buf+_len, chk);
 	return chk;
 }
 
-int zephyr2_tx(struct zephyr2_data *_z2, const MTSPISetting* setting, const u8* outBuffer, int outLen)
+static int zephyr2_tx(struct zephyr2_data *_z2, const MTSPISetting* setting, const u8* outBuffer, int outLen)
 {
 	int ret;
 	struct spi_transfer tx = {
@@ -278,7 +238,7 @@ int zephyr2_tx(struct zephyr2_data *_z2, const MTSPISetting* setting, const u8* 
 	return ret;
 }
 
-int zephyr2_txrx(struct zephyr2_data *_z2, const MTSPISetting* setting, const u8* outBuffer, int outLen, u8* inBuffer, int inLen)
+static int zephyr2_txrx(struct zephyr2_data *_z2, const MTSPISetting* setting, const u8* outBuffer, int outLen, u8* inBuffer, int inLen)
 {
 	int ret;
 	int sz = (outLen > inLen) ? outLen : inLen;
@@ -362,7 +322,7 @@ static u32 writeRegister(struct zephyr2_data *_z2, u32 address, u32 value, u32 m
 
 static void newPacket(struct zephyr2_data *_z2, const u8* data, int len)
 {
-	int i;
+	int i, num=0;
 	FingerData* finger;
 	MTFrameHeader* header = (MTFrameHeader*) data;
 	if(header->type != 0x44 && header->type != 0x43)
@@ -375,31 +335,25 @@ static void newPacket(struct zephyr2_data *_z2, const u8* data, int len)
 
 	for(i = 0; i < header->numFingers; ++i)
 	{
-		if(finger->force_major > _z2->min_pressure)
-		{
-			finger->force_major -= _z2->min_pressure;
-		}
-		else
-			finger->force_major = 0;
+		int fmaj = max(0, finger->force_major - (int)_z2->min_pressure);
+		int fmin = max(0, finger->force_minor - (int)_z2->min_pressure);
 
-		if(finger->force_minor > _z2->min_pressure)
+		if(fmaj && fmin)
 		{
-			finger->force_minor -= _z2->min_pressure;
-		}
-		else 
-			finger->force_minor = 0;
-
-		if(finger->force_major > 0 &&
-				finger->force_minor > 0)
-		{
-			input_report_abs(_z2->input_dev, ABS_MT_TOUCH_MAJOR, finger->force_major);
-			input_report_abs(_z2->input_dev, ABS_MT_TOUCH_MINOR, finger->force_minor);
+			input_report_abs(_z2->input_dev, ABS_MT_TOUCH_MAJOR, fmaj);
+			input_report_abs(_z2->input_dev, ABS_MT_TOUCH_MINOR, fmin);
 			input_report_abs(_z2->input_dev, ABS_MT_WIDTH_MAJOR, finger->size_major);
 			input_report_abs(_z2->input_dev, ABS_MT_WIDTH_MINOR, finger->size_minor);
 			input_report_abs(_z2->input_dev, ABS_MT_ORIENTATION, MAX_FINGER_ORIENTATION - finger->orientation);
 			input_report_abs(_z2->input_dev, ABS_MT_TRACKING_ID, finger->id);
 			input_report_abs(_z2->input_dev, ABS_MT_POSITION_X, finger->x);
 			input_report_abs(_z2->input_dev, ABS_MT_POSITION_Y, _z2->SensorHeight - finger->y);
+
+			if(!num++)
+			{
+				input_report_abs(_z2->input_dev, ABS_X, finger->x);
+				input_report_abs(_z2->input_dev, ABS_Y, _z2->SensorHeight - finger->y);
+			}
 		}
 
 		input_mt_sync(_z2->input_dev);
@@ -407,20 +361,12 @@ static void newPacket(struct zephyr2_data *_z2, const u8* data, int len)
 		finger = (FingerData*) (((u8*) finger) + header->fingerDataLen);
 	}
 
-	if(header->numFingers > 0)
-	{
-		finger = (FingerData*)(data + (header->headerLen));
-
-		if (finger->force_minor > 0) {
-			input_report_abs(_z2->input_dev, ABS_X, finger->x);
-			input_report_abs(_z2->input_dev, ABS_Y, _z2->SensorHeight - finger->y);
-			input_report_key(_z2->input_dev, BTN_TOUCH, finger->size_minor > 0);
-		}
-		else input_report_key(_z2->input_dev, BTN_TOUCH, 0);
-	}
-
+	input_report_key(_z2->input_dev, BTN_TOUCH, num > 0);
+	input_report_key(_z2->input_dev, BTN_TOOL_FINGER, num == 1);
+	input_report_key(_z2->input_dev, BTN_TOOL_DOUBLETAP, num == 2);
+	input_report_key(_z2->input_dev, BTN_TOOL_TRIPLETAP, num == 3);
+	input_report_key(_z2->input_dev, BTN_TOOL_QUADTAP, num == 4);
 	input_sync(_z2->input_dev);
-
 }
 
 static bool readResultData(struct zephyr2_data *_z2, int len)
@@ -769,6 +715,7 @@ static bool loadConstructedFirmware(struct zephyr2_data *_z2, const u8* firmware
 
 	for(try = 0; try < 5; ++try)
 	{
+		uint16_t val;
 
 		printk("zephyr2: uploading firmware\n");
 
@@ -776,9 +723,11 @@ static bool loadConstructedFirmware(struct zephyr2_data *_z2, const u8* firmware
 
 		udelay(300);
 
-		if(zephyr2_shortAck(_z2) == 0x4BC1)
+		val = zephyr2_shortAck(_z2);
+		if(val == 0x4BC1)
 			return true;
 
+		printk("zephyr2: strange ack: 0x%x\n", val);
 	}
 
 	return false;
@@ -1003,17 +952,12 @@ static irqreturn_t zephyr2_irq(int irq, void* pToken)
 {
 	struct zephyr2_data *z2 = (struct zephyr2_data *)pToken;
 
-	if(!z2->firmware_loaded)
-		return IRQ_HANDLED;
-	
 	dev_dbg(&z2->spi_dev->dev, "irq.\n");
-
 	schedule_work(&z2->irq_work);
-
 	return IRQ_HANDLED;
 }
 
-int zephyr2_setup(struct zephyr2_data *_z2, const u8* constructedFirmware, int constructedFirmwareLen, const u8* prox_cal, int prox_cal_size, const u8* cal, int cal_size)
+static int zephyr2_setup(struct zephyr2_data *_z2)
 {
 	int i;
 	int ret;
@@ -1021,71 +965,33 @@ int zephyr2_setup(struct zephyr2_data *_z2, const u8* constructedFirmware, int c
 	u8* reportBuffer;
 	int reportLen;
 
-	if(!prox_cal)
-	{
-		printk("zephyr2: could not find proximity calibration data\n");
-		return -1;
-	}
+	struct zephyr2_platform_data *pdata = _z2->spi_dev->dev.platform_data;
 
-	if(!cal)
+	if(!pdata->calibration)
 	{
 		printk("zephyr2: could not find calibration data\n");
 		return -1;
 	}
 
-	printk("zephyr2: Firmware at 0x%08x - 0x%08x\n",
-			(u32) constructedFirmware, (u32)(constructedFirmware + constructedFirmwareLen));
+	// Power up the device (turn it off then on again. ;])
+	printk("zephyr2: Powering Up Multitouch!\n");
+	pdata->power(pdata, 0);
+	msleep(200);
+	pdata->power(pdata, 0);
+	msleep(15);
 
-	_z2->OutputPacket = (u8*) kmalloc(MAX_BUFFER_SIZE, GFP_KERNEL);
-	_z2->InputPacket = (u8*) kmalloc(MAX_BUFFER_SIZE, GFP_KERNEL);
-	_z2->GetInfoPacket = (u8*) kmalloc(MAX_BUFFER_SIZE, GFP_KERNEL);
-	_z2->GetResultPacket = (u8*) kmalloc(MAX_BUFFER_SIZE, GFP_KERNEL);
-
-
-	// TODO: Holy mother of hacks, we need to add platform data to this driver.
-	{
-		int irq;
-		int pwr_gpio;
-
-		if(machine_is_iphone_2g())
-		{
-			irq = 0xa3;
-			pwr_gpio = 0x804;
-		}
-		else
-		{
-			irq = 0x9b;
-			pwr_gpio = 0x701;
-		}
-
-		if(request_irq(irq + IPHONE_GPIO_IRQS, zephyr2_irq, IRQF_TRIGGER_FALLING, "iphone-multitouch", _z2))
-		{
-			printk("zephyr2: Failed to request z2 interrupt.\n");
-			return -1;
-		}
-
-		// Power up the device (turn it off then on again. ;])
-		printk("zephyr2: Powering Up Multitouch!\n");
-		iphone_gpio_pin_output(pwr_gpio, 0);
-		msleep(200);
-
-		iphone_gpio_pin_output(pwr_gpio, 1);
-		msleep(15);
-	}
-
+	gpio_direction_output(pdata->reset_gpio, 0);
 	for(i = 0; i < 4; ++i)
 	{
-		iphone_gpio_pin_output(0x606, 0);
+		gpio_set_value(pdata->reset_gpio, 0);
 		msleep(200);
-		iphone_gpio_pin_output(0x606, 1);
+		gpio_set_value(pdata->reset_gpio, 1);
 		msleep(15);
 
 		// Send Firmware
 		printk("zephyr2: Sending Firmware...\n");
-		if(loadConstructedFirmware(_z2, constructedFirmware, constructedFirmwareLen))
-		{
+		if(loadConstructedFirmware(_z2, _z2->firmware->data, _z2->firmware->size))
 			break;
-		}
 	}
 
 	if(i == 4)
@@ -1099,11 +1005,11 @@ int zephyr2_setup(struct zephyr2_data *_z2, const u8* constructedFirmware, int c
 			return err;
 	}
 
-	printk("zephyr2: loaded %d byte preconstructed firmware\n", constructedFirmwareLen);
+	printk("zephyr2: loaded %d byte preconstructed firmware\n", _z2->firmware->size);
 
-	if(!machine_is_ipod_touch_1g())
+	if(pdata->prox_cal)
 	{
-		if(!loadProxCal(_z2, prox_cal, prox_cal_size))
+		if(!loadProxCal(_z2, pdata->prox_cal, pdata->prox_cal_size))
 		{
 			printk("zephyr2: could not load proximity calibration data\n");
 			err = -1;
@@ -1114,10 +1020,10 @@ int zephyr2_setup(struct zephyr2_data *_z2, const u8* constructedFirmware, int c
 			return err;
 		}
 
-		printk("zephyr2: loaded %d byte proximity calibration data\n", prox_cal_size);
+		printk("zephyr2: loaded %d byte proximity calibration data\n", pdata->prox_cal_size);
 	}
 
-	if(!loadCal(_z2, cal, cal_size))
+	if(!loadCal(_z2, pdata->calibration, pdata->calibration_size))
 	{
 		printk("zephyr2: could not load calibration data\n");
 		err = -1;
@@ -1129,7 +1035,7 @@ int zephyr2_setup(struct zephyr2_data *_z2, const u8* constructedFirmware, int c
 	}
 
 
-	printk("zephyr2: loaded %d byte calibration data\n", cal_size);
+	printk("zephyr2: loaded %d byte calibration data\n", pdata->calibration_size);
 
 	if(!zephyr2_calibrate(_z2))
 	{
@@ -1288,8 +1194,15 @@ int zephyr2_setup(struct zephyr2_data *_z2, const u8* constructedFirmware, int c
 	_z2->input_dev->id.product = 0;
 	_z2->input_dev->id.version = 0x0000;
 	_z2->input_dev->dev.parent = &_z2->spi_dev->dev;
-	_z2->input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);
-	_z2->input_dev->keybit[BIT_WORD(BTN_TOUCH)] = BIT_MASK(BTN_TOUCH);
+
+	__set_bit(EV_KEY, _z2->input_dev->evbit);
+	__set_bit(EV_ABS, _z2->input_dev->evbit);
+	__set_bit(BTN_TOUCH, _z2->input_dev->keybit);
+	__set_bit(BTN_TOOL_FINGER, _z2->input_dev->keybit);
+	__set_bit(BTN_TOOL_DOUBLETAP, _z2->input_dev->keybit);
+	__set_bit(BTN_TOOL_TRIPLETAP, _z2->input_dev->keybit);
+	__set_bit(BTN_TOOL_QUADTAP, _z2->input_dev->keybit);
+
 	input_set_abs_params(_z2->input_dev, ABS_X, 0, _z2->SensorWidth, 0, 0);
 	input_set_abs_params(_z2->input_dev, ABS_Y, 0, _z2->SensorHeight, 0, 0);
 	input_set_abs_params(_z2->input_dev, ABS_MT_TOUCH_MAJOR, 0, max(_z2->SensorHeight, _z2->SensorWidth), 0, 0);
@@ -1318,31 +1231,9 @@ int zephyr2_setup(struct zephyr2_data *_z2, const u8* constructedFirmware, int c
 
 	_z2->CurNOP = 1;
 
-	_z2->firmware_loaded = true;
-
 	zephyr2_readFrame(_z2);
 
 	return 0;
-}
-
-static void got_constructed(const struct firmware* fw, void *context)
-{
-	struct zephyr2_data *z2 = (struct zephyr2_data *)context;
-
-	if(!fw)
-	{
-		printk("zephyr2: couldn't get firmware, trying again...\n");
-		request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "zephyr2.bin", &z2->spi_dev->dev, 0, z2, got_constructed);
-		return;
-	}
-
-	constructed_fw = kmalloc(fw->size, GFP_KERNEL);
-	constructed_fw_size = fw->size;
-	memcpy(constructed_fw, fw->data, fw->size);
-
-	zephyr2_setup(z2, constructed_fw, constructed_fw_size, proxcal_fw, proxcal_fw_size, cal_fw, cal_fw_size);
-
-	/* caller will call release_firmware */
 }
 
 // Device Attributes
@@ -1377,10 +1268,9 @@ static DEVICE_ATTR(min_pressure, 0666, &zephyr2_min_pressure_show, &zephyr2_min_
 
 static int zephyr2_probe(struct spi_device *_dev)
 {
+	struct zephyr2_data *z2 = kzalloc(sizeof(struct zephyr2_data), GFP_KERNEL);
+	struct zephyr2_platform_data *pdata = _dev->dev.platform_data;
 	int ret;
-	struct zephyr2_data *z2 = (struct zephyr2_data *)kmalloc(sizeof(struct zephyr2_data), GFP_KERNEL);
-	memset(z2, sizeof(struct zephyr2_data), 0);
-	spi_set_drvdata(_dev, z2);
 
 	_dev->bits_per_word = 8;
 	ret = spi_setup(_dev);
@@ -1390,27 +1280,102 @@ static int zephyr2_probe(struct spi_device *_dev)
 		return ret;
 	}
 
+	z2 = kzalloc(sizeof(struct zephyr2_data), GFP_KERNEL);
+	if(!z2)
+	{
+		dev_err(&_dev->dev, "failed to allocate state.\n");
+		ret = -ENOMEM;
+		goto exit;
+	}
+
 	INIT_WORK(&z2->irq_work, &zephyr2_irq_work);
 	spin_lock_init(&z2->irq_lock);
-	z2->firmware_loaded = false;
+
 	z2->spi_dev = _dev;
 	z2->min_pressure = 100;
 	z2->irq_count = 0;
 
 	ret = device_create_file(&_dev->dev, &dev_attr_min_pressure);
 	if(ret)
+	{
 		dev_err(&_dev->dev, "failed to create min_pressure attribute.\n");
+		goto err_state;
+	}
 
-	dev_info(&_dev->dev, "requesting Firmware\n");
-	return request_firmware_nowait(THIS_MODULE, FW_ACTION_HOTPLUG, "zephyr2.bin", &_dev->dev, 0, z2, got_constructed);
+	ret = request_firmware(&z2->firmware, "zephyr2.bin", &_dev->dev);
+	if(ret < 0)
+	{
+		dev_err(&_dev->dev, "failed to retrieve firmware.\n");
+		goto err_state;
+	}
+
+	ret = gpio_request(pdata->reset_gpio, "zephyr2-reset");
+	if(ret < 0)
+	{
+		dev_err(&_dev->dev, "failed to acquire zephyr2 reset GPIO.\n");
+		goto err_fw;
+	}
+
+	ret = gpio_request(pdata->touch_gpio, "zephyr2-touch");
+	if(ret < 0)
+	{
+		dev_err(&_dev->dev, "failed to acquire zephyr2 touch GPIO.\n");
+		goto err_rst;
+	}
+
+	gpio_direction_input(pdata->touch_gpio);
+	z2->irq = gpio_to_irq(pdata->touch_gpio);
+	ret = request_irq(z2->irq, zephyr2_irq, IRQF_TRIGGER_HIGH, "zephyr2", z2);
+	if(ret < 0)
+	{
+		dev_err(&_dev->dev, "failed to request GPIO irq for touch.\n");
+		goto err_touch;
+	}
+
+	ret = zephyr2_setup(z2);
+	if(ret < 0)
+	{
+		dev_err(&_dev->dev, "failed to setup zephyr2!\n");
+		goto err_irq;
+	}
+
+	spi_set_drvdata(_dev, z2);
+	goto exit;
+
+err_irq:
+	free_irq(z2->irq, z2);
+
+err_touch:
+	gpio_free(pdata->touch_gpio);
+
+err_rst:
+	gpio_free(pdata->reset_gpio);
+
+err_fw:
+	release_firmware(z2->firmware);
+
+err_state:
+	kfree(z2);
+
+exit:
+	return ret;
 }
 
 static int zephyr2_remove(struct spi_device *_dev)
 {
-	//struct zephyr2_data *z2 = (struct zephyr2_data *)spi_get_drvdata(_dev);
-	
+	struct zephyr2_data *z2 = spi_get_drvdata(_dev);
+	struct zephyr2_platform_data *pdata = _dev->dev.platform_data;
+
 	device_remove_file(&_dev->dev, &dev_attr_min_pressure);
 
+	pdata->power(pdata, 0);
+	
+	free_irq(z2->irq, z2);
+	release_firmware(z2->firmware);
+	gpio_free(pdata->touch_gpio);
+	gpio_free(pdata->reset_gpio);
+	
+	kfree(z2);	
 	return 0;
 }
 
@@ -1452,28 +1417,6 @@ static void __exit zephyr2_exit(void)
 	spi_unregister_driver(&zephyr2_driver);
 }
 module_exit(zephyr2_exit);
-
-static int __init parse_tag_prox_cal(const struct tag *tag)
-{
-	const struct atag_iphone_cal_data* cal_tag = (const struct atag_iphone_cal_data*)(((const u8*)tag) + sizeof(struct tag_header));
-
-	proxcal_fw_size = cal_tag->size;
-	memcpy(proxcal_fw, cal_tag->data, proxcal_fw_size);
-
-	return 0;
-}
-__tagtable(ATAG_IPHONE_PROX_CAL, parse_tag_prox_cal);
-
-static int __init parse_tag_mt_cal(const struct tag *tag)
-{
-	const struct atag_iphone_cal_data* cal_tag = (const struct atag_iphone_cal_data*)(((const u8*)tag) + sizeof(struct tag_header));
-
-	cal_fw_size = cal_tag->size;
-	memcpy(cal_fw, cal_tag->data, cal_fw_size);
-
-	return 0;
-}
-__tagtable(ATAG_IPHONE_MT_CAL, parse_tag_mt_cal);
 
 MODULE_DESCRIPTION("iPhone Zephyr 2 Multitouch Driver");
 MODULE_AUTHOR("Yiduo Wang");
