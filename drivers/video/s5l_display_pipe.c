@@ -33,19 +33,7 @@ struct s5l_display_pipe_ui
 	u32 index;
 	void *__iomem regs;
 
-	u32 enable_bit;
-
 	u32 pseudo_palette[16];
-};
-
-static size_t display_pipe_uis[] = {
-	S5L_DPUI0,
-	S5L_DPUI1,
-};
-
-static unsigned long display_pipe_ui_bits[] = {
-	S5L_DPCTL_UI0EN,
-	S5L_DPCTL_UI1EN,
 };
 
 static int display_pipe_setcolreg(unsigned _idx,
@@ -118,8 +106,6 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 	struct fb_info *fbinfo;
 	bool reg = false;
 
-	BUG_ON(_idx >= ARRAY_SIZE(display_pipe_uis));
-
 	if(!ui)
 	{
 		reg = true;
@@ -135,8 +121,7 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 		ui->info = fbinfo;
 		ui->state = _state;
 		ui->index = _idx;
-		ui->enable_bit = display_pipe_ui_bits[_idx];
-		ui->regs = _state->regs + display_pipe_uis[_idx];
+		ui->regs = _state->regs + S5L_DPUIx(_idx);
 
 		fbinfo->fix.type	= FB_TYPE_PACKED_PIXELS;
 		fbinfo->fix.visual = FB_VISUAL_TRUECOLOR;
@@ -225,7 +210,7 @@ int display_pipe_configure_window(struct s5l_display_pipe_state *_state, u32 _id
 	
 	printk("%s: fb done.\n", __func__);
 
-	writel(display_pipe_ui_bits[_idx] | readl(_state->regs + S5L_DPCTL),
+	writel(S5L_DPCTL_UIxEN(_idx) | readl(_state->regs + S5L_DPCTL),
 			_state->regs + S5L_DPCTL);
 
 	printk("%s: regs done.\n", __func__);
