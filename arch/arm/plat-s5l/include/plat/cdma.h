@@ -23,7 +23,7 @@
 typedef enum
 {
 	CDMA_TO_MEM = 0,
-	CDMA_FROM_MEM,
+	CDMA_FROM_MEM = 1,
 } cdma_dir_t;
 
 struct cdma_aes
