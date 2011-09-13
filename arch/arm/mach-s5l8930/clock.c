@@ -15,6 +15,7 @@
 #include <linux/err.h>
 #include <linux/clk.h>
 #include <linux/io.h>
+#include <linux/delay.h>
 
 #include <mach/map.h>
 
@@ -169,6 +170,21 @@ static int s5l_clock_gate_toggle(struct clk *_clk, int _enable)
 {
 	s5l_clock_gate_toggle_idx(_clk->ctrlbit, _enable);
 	return 0;
+}
+
+static void s5l_clock_gate_reset_idx(int _idx)
+{
+	uint32_t __iomem *reg = &S5L_CLOCK_GATE[_idx];
+	BUG_ON(_idx >= 64);
+
+	writel((1 << 31) | readl(reg), reg);
+	udelay(1);
+	writel(readl(reg) &~ (1 << 31), reg);
+}
+
+void s5l_clock_gate_reset(struct clk *_clk)
+{
+	s5l_clock_gate_reset_idx(_clk->ctrlbit);
 }
 
 struct s5l_power_zone
@@ -993,29 +1009,29 @@ static struct clk clk_sdio_ceata = {
 };
 
 static struct clk clk_fmi0 = {
-	.name = "fmi0",
-	.id = -1,
+	.name = "fmi",
+	.id = 0,
 	.enable = s5l_clock_gate_toggle,
 	.ctrlbit = 0x27,
 };
 
 static struct clk clk_fmi0_bch = {
-	.name = "fmi0-bch",
-	.id = -1,
+	.name = "fmi-bch",
+	.id = 0,
 	.enable = s5l_clock_gate_toggle,
 	.ctrlbit = 0x28,
 };
 
 static struct clk clk_fmi1 = {
-	.name = "fmi1",
-	.id = -1,
+	.name = "fmi",
+	.id = 1,
 	.enable = s5l_clock_gate_toggle,
 	.ctrlbit = 0x29,
 };
 
 static struct clk clk_fmi1_bch = {
-	.name = "fmi1-bch",
-	.id = -1,
+	.name = "fmi-bch",
+	.id = 1,
 	.enable = s5l_clock_gate_toggle,
 	.ctrlbit = 0x2A,
 };
@@ -1245,10 +1261,17 @@ struct clk clk_xusbxti = {
 	.parent = &clk_xtal,
 };
 
+struct clk clk_spi_nclk = {
+	.name = "spi-clk",
+	.id = -1,
+	.parent = &clk_xtal,
+};
+
 static struct clk *clocks_init[] = {
 	&clk_uart0, // Used for debugging
 	&clk_uclk0,
 	&clk_xusbxti,
+	&clk_spi_nclk,
 	&clk_mipi_dsi, // Once fixed, deal with this
 	&clk_clcd, // Ditto
 };

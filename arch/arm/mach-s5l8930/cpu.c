@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/serial_core.h>
 #include <linux/platform_device.h>
+#include <linux/dma-mapping.h>
 
 #include <mach/cpu.h>
 #include <mach/map.h>
@@ -153,6 +154,36 @@ static struct s3c_sdhci_platdata sdio0_pdata = {
 	.clocks = sdio0_clocks,
 };
 
+static struct resource cdma_res[] = {
+	[0] = {
+		.start = PA_CDMA,
+		.end = PA_CDMA + SZ_CDMA - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = PA_CDMA_AES,
+		.end = PA_CDMA_AES + SZ_CDMA_AES - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[2] = {
+		.start = IRQ_CDMA0,
+		.end = IRQ_CDMA36,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device cdma_dev = {
+	.name = "apple-cdma",
+	.id = -1,
+	
+	.resource = cdma_res,
+	.num_resources = ARRAY_SIZE(cdma_res),
+
+	.dev = {
+		.coherent_dma_mask = DMA_32BIT_MASK,
+	},
+};
+
 extern struct platform_device s5l8930_spi0;
 extern struct platform_device s5l8930_spi1;
 
@@ -161,7 +192,7 @@ static struct platform_device *s5l8930_devices[] __initdata = {
 	&s5l8930_spi1,
 	&s3c_device_i2c0,
 	&s3c_device_i2c1,
-	&s3c_device_usb_hsotg,
+	//&s3c_device_usb_hsotg,
 	&s3c_device_hsmmc0,
 };
 
@@ -281,4 +312,5 @@ void __init s5l8930_init_irq(void)
 void __init s5l8930_init(void)
 {
 	printk("%s\n", __func__);
+	platform_device_register(&cdma_dev);
 }

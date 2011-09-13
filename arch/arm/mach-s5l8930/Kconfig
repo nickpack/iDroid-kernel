@@ -14,6 +14,7 @@ config CPU_S5L8930
 	select S3C_DEV_HSMMC
 	select S3C_DEV_USB_HSOTG
 	select SPI_S5L
+	select S5L_CDMA
 	select USB_GADGET_S3C_HSOTG
 	select KEYBOARD_GPIO
 	help
@@ -22,12 +23,14 @@ config CPU_S5L8930
 config MACH_IPHONE_4
 	bool "iPhone 4"
 	select CPU_S5L8930
+	select TOUCHSCREEN_ZEPHYR2
 	help
 	  Enable support for the iPhone 4.
 
 config MACH_IPOD_TOUCH_4G
 	bool "iPod Touch 4G"
 	select CPU_S5L8930
+	select TOUCHSCREEN_ZEPHYR2
 	help
 	  Enable support for the 4th generation
 	  iPod Touch.
@@ -35,6 +38,7 @@ config MACH_IPOD_TOUCH_4G
 config MACH_IPAD_1G
 	bool "iPad 1G"
 	select CPU_S5L8930
+	select TOUCHSCREEN_ZEPHYR2
 	help
 	  Enable support for the 1st generation
 	  iPad.

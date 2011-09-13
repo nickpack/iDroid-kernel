@@ -12,5 +12,6 @@
 #define  S5L8930_DEVICES_H
 
 extern void s5l8930_register_gpio_keys(struct gpio_keys_button *_btn, size_t _num);
+extern int s5l8930_register_h2fmi(void);
 
 #endif //S5L8930_DEVICES_H
