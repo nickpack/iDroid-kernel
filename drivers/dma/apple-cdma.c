@@ -195,7 +195,7 @@ static int cdma_continue(struct cdma_state *_state, int _chan)
 	int segsleft = 32;
 	int amt_done = 0;
 
-	if(!cstate->count)
+	if(!cstate->count || !cstate->sg)
 	{
 		dev_err(&_state->dev->dev, "tried to transfer nothing.\n");
 		return -EINVAL;
@@ -278,13 +278,14 @@ static int cdma_continue(struct cdma_state *_state, int _chan)
 				segsleft = 0;
 			}
 
+			// Empty last seg OR next seg
 			seg = cdma_alloc_segment(_state, cstate, &seg->next);
 		}
 	}
 
 	cstate->done += amt_done;
 	writel(addr, _state->regs + CDMA_CSEGPTR(_chan));
-	writel(0x1C0009 | (cstate->aes_channel << 8), _state->regs + CDMA_CSTATUS(_chan));
+	writel(0x1C0009 | ((cstate->aes_channel+1) << 8), _state->regs + CDMA_CSTATUS(_chan));
 
 	printk("%s: %d 0x%08x.\n", __func__, _chan, readl(_state->regs + CDMA_CSTATUS(_chan)));
 	return 0;
@@ -562,13 +563,17 @@ static irqreturn_t cdma_irq_handler(int _irq, void *_token)
 	int chan = _irq - state->irq;
 	struct cdma_channel_state *cstate = &state->channels[chan];
 	u32 sz;
+	int res = 0;
 
 	u32 status = readl(state->regs + CDMA_CSTATUS(chan));
 
 	printk("%s!\n", __func__);
 
 	if(status & CSTATUS_INTERR)
+	{
 		dev_err(&state->dev->dev, "channel %d: error interrupt.\n", chan);
+		res = -EIO;
+	}
 
 	if(status & CSTATUS_SPURCIR)
 		dev_err(&state->dev->dev, "channel %d: spurious CIR.\n", chan);
@@ -576,7 +581,7 @@ static irqreturn_t cdma_irq_handler(int _irq, void *_token)
 	writel(CSTATUS_INTCLR, state->regs + CDMA_CSTATUS(chan));
 
 	sz = readl(state->regs + CDMA_CSIZE(chan));
-	if(cstate->count < cstate->done || sz)
+	if(!res && (cstate->count < cstate->done || sz))
 	{
 		if(status & CSTATUS_TXRDY)
 			panic("TODO: %s, incomplete transfers.\n", __func__);
