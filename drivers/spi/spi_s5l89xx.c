@@ -30,6 +30,9 @@
 #include <mach/regs-spi.h>
 #include <mach/spi.h>
 
+#undef dev_dbg
+#define dev_dbg dev_info
+
 /**
  * s5l89xx_spi_devstate - per device data
  * @hz: Last frequency calculated for @sppre field.
@@ -66,6 +69,7 @@ struct s5l89xx_spi {
 	u8 word_shift;
 
 	struct clk		*clk;
+	struct clk		*clk_src;
 	struct resource		*ioarea;
 	struct spi_master	*master;
 	struct spi_device	*curdev;
@@ -74,7 +78,7 @@ struct s5l89xx_spi {
 };
 
 
-#define SPCON_DEFAULT (S3C2410_SPCON_MSTR | S3C2410_SPCON_SMOD_INT)
+#define SPCON_DEFAULT (S3C2410_SPCON_MSTR | S3C2410_SPCON_SMOD_INT | S5L89XX_SPCON_CLOCK)
 #define SPPIN_DEFAULT (S3C2400_SPPIN_nCS)
 
 static inline struct s5l89xx_spi *to_hw(struct spi_device *sdev)
@@ -98,12 +102,11 @@ static void s5l89xx_spi_chipsel(struct spi_device *spi, int value)
 	switch (value) {
 	case BITBANG_CS_INACTIVE:
 		hw->set_cs(hw->pdata, spi->chip_select, cspol^1);
-		writel(cs->spcon, hw->regs + S3C2410_SPCON);
+		writel(cs->spcon &~ S3C2410_SPCON_ENSCK, hw->regs + S3C2410_SPCON);
 		break;
 
 	case BITBANG_CS_ACTIVE:
-		writel(cs->spcon | S3C2410_SPCON_ENSCK,
-		       hw->regs + S3C2410_SPCON);
+		writel(cs->spcon, hw->regs + S3C2410_SPCON);
 		hw->set_cs(hw->pdata, spi->chip_select, cspol);
 		break;
 	}
@@ -128,8 +131,6 @@ static int s5l89xx_spi_update_state(struct spi_device *spi,
 
 	if (!hz)
 		hz = spi->max_speed_hz;
-
-	writel(0, hw->regs + S5L_SPCTL);
 
 	switch(bpw)
 	{
@@ -166,14 +167,14 @@ static int s5l89xx_spi_update_state(struct spi_device *spi,
 	cs->spcon = spcon;
 
 	if (cs->hz != hz) {
-		clk = clk_get_rate(hw->clk);
+		clk = clk_get_rate(hw->clk_src);
 		div = DIV_ROUND_UP(clk, hz * 2) - 1;
 
 		if (div > 255)
 			div = 255;
 
-		dev_dbg(&spi->dev, "pre-scaler=%d (wanted %d, got %ld)\n",
-			div, hz, clk / (2 * (div + 1)));
+		dev_dbg(&spi->dev, "pre-scaler=%d src=%u (wanted %d, got %ld)\n",
+			div, clk, hz, clk / (2 * (div + 1)));
 
 		cs->hz = hz;
 		cs->sppre = div;
@@ -189,9 +190,14 @@ static int s5l89xx_spi_setupxfer(struct spi_device *spi,
 	struct s5l89xx_spi *hw = to_hw(spi);
 	int ret;
 
+	writel(0, hw->regs + S5L_SPCLKCON);
 	ret = s5l89xx_spi_update_state(spi, t);
 	if (!ret)
+	{
 		writel(cs->sppre, hw->regs + S3C2410_SPPRE);
+		writel(cs->spcon, hw->regs + S3C2410_SPCON);
+	}
+	writel(1, hw->regs + S5L_SPCLKCON);
 
 	return ret;
 }
@@ -245,8 +251,12 @@ static inline void hw_tx(struct s5l89xx_spi *hw, u32 spsta)
 	uint32_t left = hw->len - hw->tx_done;
 	if(count > left)
 		count = left;
+	
+	if(count == 0)
+		return;
 
 	hw->tx_done += count;
+	//dev_dbg(hw->dev, "tx %d.\n", count);
 	switch(cs->word_shift)
 	{
 	case 0:
@@ -285,7 +295,11 @@ static inline void hw_rx(struct s5l89xx_spi *hw, u32 spsta)
 	if(count > left)
 		count = left;
 
+	if(count == 0)
+		return;
+
 	hw->rx_done += count;
+	//dev_dbg(hw->dev, "rx %d.\n", count);
 	switch(cs->word_shift)
 	{
 	case 0:
@@ -329,12 +343,10 @@ static int s5l89xx_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 	BUG_ON(hw->len == 0);
 
 	// TODO: Should I round up len for word_size > 8? -- Ricky26
+	
+	INIT_COMPLETION(hw->done);
 
-	init_completion(&hw->done);
-
-	writel((1 << 2) | (1 << 3)
-			| readl(hw->regs + S5L_SPCTL),
-			hw->regs + S5L_SPCTL);
+	writel(1 | 4 | 8 | readl(hw->regs + S5L_SPCLKCON), hw->regs + S5L_SPCLKCON);
 
 	cs->spcon |= S5L_SPCON_FIFO_EN;
 
@@ -343,11 +355,11 @@ static int s5l89xx_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 		u32 spsta = readl(hw->regs + S3C2410_SPSTA);
 
 		cs->spcon |= S5L_SPCON_TXFIFO_EN;
-		writel(hw->len, hw->regs + S5L_SPTXC);
 		hw_tx(hw, spsta);
+		writel(hw->len, hw->regs + S5L_SPTXC);
 	}
 	else
-		writel(0, hw->regs + S5L_SPTXC);
+		hw->tx_done = hw->len;
 
 	if(hw->rx)
 	{
@@ -355,13 +367,17 @@ static int s5l89xx_spi_txrx(struct spi_device *spi, struct spi_transfer *t)
 		writel(hw->len, hw->regs + S5L_SPRXC);
 	}
 	else
+	{
+		hw->rx_done = hw->len;
 		writel(0, hw->regs + S5L_SPRXC);
+	}
 
 	if(hw->rx && !hw->tx)
 		cs->spcon |= S3C2410_SPCON_TAGD;
 
+	dev_dbg(hw->dev, "%s: %d %p/%p 0x%08x.\n", __func__, hw->len, hw->tx, hw->rx, cs->spcon);
 	writel(cs->spcon, hw->regs + S3C2410_SPCON);
-	writel(1, hw->regs + S5L_SPCTL);
+	//writel(1, hw->regs + S5L_SPCLKCON);
 
 	wait_for_completion(&hw->done);
 	return hw->tx_done;
@@ -375,28 +391,51 @@ static irqreturn_t s5l89xx_spi_irq(int irq, void *dev)
 
 	if(spsta & S3C2410_SPSTA_DCOL)
 	{
-		dev_dbg(hw->dev, "data-collision\n");
+		dev_err(hw->dev, "data-collision\n");
+		hw->tx_done = -EIO;
+		cs->spcon &=~ S5L_SPCON_RXFIFO_EN
+			| S5L_SPCON_TXFIFO_EN
+			| S5L_SPCON_FIFO_EN;
+		writel(cs->spcon, hw->regs + S3C2410_SPCON);
+		writel(0, hw->regs + S5L_SPCLKCON);
 		complete(&hw->done);
 		goto irq_done;
 	}
 
-	if(spsta & S5L_SPSTA_TXREADY)
+	if(spsta & S3C2410_SPSTA_MULD)
+	{
+		dev_err(hw->dev, "multi-master error\n");
+		hw->tx_done = -EIO;
+		cs->spcon &=~ S5L_SPCON_RXFIFO_EN
+			| S5L_SPCON_TXFIFO_EN
+			| S5L_SPCON_FIFO_EN;
+		writel(cs->spcon, hw->regs + S3C2410_SPCON);
+		writel(0, hw->regs + S5L_SPCLKCON);
+		complete(&hw->done);
+		goto irq_done;
+	}
+
+	if(spsta & S3C2412_SPSTA_TXFIFO_NFULL)
 	{
 		// Ready for TX
 		hw_tx(hw, spsta);
+
 		if(hw->tx_done >= hw->len)
 		{
+			//dev_dbg(hw->dev, "tx done!\n");
 			cs->spcon &=~ S5L_SPCON_TXFIFO_EN;
 			writel(cs->spcon, hw->regs + S3C2410_SPCON);
 		}
 	}
 
-	if(spsta & S3C2410_SPSTA_READY)
+	if(!(spsta & S3C2412_SPSTA_RXFIFO_EMPTY))
 	{
 		// Ready for RX
 		hw_rx(hw, spsta);
+
 		if(hw->rx_done >= hw->len)
 		{
+			//dev_dbg(hw->dev, "rx done!\n");
 			cs->spcon &=~ S5L_SPCON_RXFIFO_EN;
 			writel(cs->spcon, hw->regs + S3C2410_SPCON);
 		}
@@ -405,15 +444,16 @@ static irqreturn_t s5l89xx_spi_irq(int irq, void *dev)
 	if(hw->tx_done >= hw->len
 			&& hw->rx_done >= hw->len)
 	{
-		cs->spcon &=~ S5L_SPCON_RXFIFO_EN
+		//dev_dbg(hw->dev, "txrx done!\n");
+
+		cs->spcon &=~ (S5L_SPCON_RXFIFO_EN
 			| S5L_SPCON_TXFIFO_EN
-			| S5L_SPCON_FIFO_EN;
+			| S5L_SPCON_FIFO_EN);
+		//dev_dbg(hw->dev, "spcon: 0x%08x.\n", cs->spcon);
 		writel(cs->spcon, hw->regs + S3C2410_SPCON);
 
 		complete(&hw->done);
 	}
-
-	writel(spsta, hw->regs + S3C2410_SPSTA);
 
  irq_done:
 	return IRQ_HANDLED;
@@ -424,7 +464,7 @@ static void s5l89xx_spi_initialsetup(struct s5l89xx_spi *hw)
 	/* for the moment, permanently enable the clock */
 
 	clk_enable(hw->clk);
-	writel(0, hw->regs + S5L_SPCTL);
+	writel(0, hw->regs + S5L_SPCLKCON);
 
 	/* program defaults into the registers */
 
@@ -462,6 +502,7 @@ static int __init s5l89xx_spi_probe(struct platform_device *pdev)
 	hw->master = spi_master_get(master);
 	hw->pdata = pdata = pdev->dev.platform_data;
 	hw->dev = &pdev->dev;
+	init_completion(&hw->done);
 
 	if (pdata == NULL) {
 		dev_err(&pdev->dev, "No platform data supplied\n");
@@ -537,6 +578,10 @@ static int __init s5l89xx_spi_probe(struct platform_device *pdev)
 		goto err_no_clk;
 	}
 
+	hw->clk_src = clk_get(&pdev->dev, "spi-clk");
+	if(IS_ERR(hw->clk_src))
+		hw->clk_src = hw->clk;
+
 	/* setup any gpio we can */
 
 	if (!pdata->set_cs) {
@@ -575,6 +620,9 @@ static int __init s5l89xx_spi_probe(struct platform_device *pdev)
 	clk_disable(hw->clk);
 	clk_put(hw->clk);
 
+	if(hw->clk != hw->clk_src)
+		clk_put(hw->clk_src);
+
  err_no_clk:
 	free_irq(hw->irq, hw);
 
@@ -604,6 +652,9 @@ static int __exit s5l89xx_spi_remove(struct platform_device *dev)
 	clk_disable(hw->clk);
 	clk_put(hw->clk);
 
+	if(hw->clk != hw->clk_src)
+		clk_put(hw->clk_src);
+
 	free_irq(hw->irq, hw);
 	iounmap(hw->regs);
 
@@ -619,10 +670,9 @@ static int __exit s5l89xx_spi_remove(struct platform_device *dev)
 
 
 #ifdef CONFIG_PM
-
-static int s5l89xx_spi_suspend(struct device *dev)
+static int s5l89xx_spi_suspend(struct platform_device *_dev, pm_message_t _state)
 {
-	struct s5l89xx_spi *hw = platform_get_drvdata(to_platform_device(dev));
+	struct s5l89xx_spi *hw = platform_get_drvdata(_dev);
 
 	if (hw->pdata && hw->pdata->gpio_setup)
 		hw->pdata->gpio_setup(hw->pdata, 0);
@@ -631,37 +681,36 @@ static int s5l89xx_spi_suspend(struct device *dev)
 	return 0;
 }
 
-static int s5l89xx_spi_resume(struct device *dev)
+static int s5l89xx_spi_resume(struct platform_device *_dev)
 {
-	struct s5l89xx_spi *hw = platform_get_drvdata(to_platform_device(dev));
+	struct s5l89xx_spi *hw = platform_get_drvdata(_dev);
 
 	s5l89xx_spi_initialsetup(hw);
 	return 0;
 }
 
-static const struct dev_pm_ops s5l89xx_spi_pmops = {
-	.suspend	= s5l89xx_spi_suspend,
-	.resume		= s5l89xx_spi_resume,
-};
-
-#define S5L89XX_SPI_PMOPS &s5l89xx_spi_pmops
 #else
-#define S5L89XX_SPI_PMOPS NULL
+#define s5l89xx_spi_suspend		NULL
+#define s5l89xx_spi_resume		NULL
 #endif /* CONFIG_PM */
 
 MODULE_ALIAS("platform:s5l89xx-spi");
 static struct platform_driver s5l89xx_spi_driver = {
+	.probe		= s5l89xx_spi_probe,
 	.remove		= __exit_p(s5l89xx_spi_remove),
+	
+	.suspend	= s5l89xx_spi_suspend,
+	.resume		= s5l89xx_spi_resume,
+
 	.driver		= {
 		.name	= "s5l89xx-spi",
 		.owner	= THIS_MODULE,
-		.pm	= S5L89XX_SPI_PMOPS,
 	},
 };
 
 static int __init s5l89xx_spi_init(void)
 {
-        return platform_driver_probe(&s5l89xx_spi_driver, s5l89xx_spi_probe);
+        return platform_driver_register(&s5l89xx_spi_driver);
 }
 
 static void __exit s5l89xx_spi_exit(void)
