@@ -194,6 +194,7 @@ static int cdma_continue(struct cdma_state *_state, int _chan)
 	dma_addr_t addr = 0;
 	int segsleft = 32;
 	int amt_done = 0;
+	u32 flags;
 
 	if(!cstate->count || !cstate->sg)
 	{
@@ -285,7 +286,15 @@ static int cdma_continue(struct cdma_state *_state, int _chan)
 
 	cstate->done += amt_done;
 	writel(addr, _state->regs + CDMA_CSEGPTR(_chan));
-	writel(0x1C0009 | ((cstate->aes_channel+1) << 8), _state->regs + CDMA_CSTATUS(_chan));
+
+	flags = 0x1C0009;
+	if(cstate->aes)
+	{
+		printk("%s: AES!\n", __func__);
+		flags |= (cstate->aes_channel+1) << 8;
+	}
+
+	writel(flags, _state->regs + CDMA_CSTATUS(_chan));
 
 	printk("%s: %d 0x%08x.\n", __func__, _chan, readl(_state->regs + CDMA_CSTATUS(_chan)));
 	return 0;
@@ -690,6 +699,7 @@ static int cdma_probe(struct platform_device *_dev)
 	for(i = 0; i < state->num_channels; i++)
 	{
 		struct cdma_channel_state *cstate = &state->channels[i];
+		cstate->aes_channel = -1;
 		init_completion(&cstate->completion);
 		INIT_LIST_HEAD(&cstate->segments);
 	}
