@@ -28,7 +28,7 @@ typedef enum
 
 struct cdma_aes
 {
-	unsigned inverse: 1;
+	unsigned decrypt: 1;
 	u32 type;
 	const u32 *key;
 	size_t data_size;
