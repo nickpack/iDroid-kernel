@@ -20,6 +20,14 @@
 
 #include <plat/cdma.h>
 
+//#define CDMA_DEBUG
+
+#ifdef CDMA_DEBUG
+#define cdma_dbg(state, args...) dev_info(&(state)->dev->dev, args)
+#else
+#define cdma_dbg(state, args...)
+#endif
+
 typedef struct _cmda_segment
 {
 	u32 next;	// Should be a DMA address
@@ -49,7 +57,7 @@ struct cdma_segment_tag
 #define CDMA_CSIZE(x)			(CDMA_CHAN(x) + 0xC)
 #define CDMA_CSEGPTR(x)			(CDMA_CHAN(x) + 0x14)
 
-#define CDMA_AES(x)				(((x)+1)*0x1000)
+#define CDMA_AES(x)				((x)*0x1000)
 #define CDMA_AES_CONFIG(x)		(CDMA_AES(x) + 0x0)
 #define CDMA_AES_KEY(x, y)		(CDMA_AES(x) + 0x20 + ((y)*4))
 
@@ -81,7 +89,7 @@ struct cdma_segment_tag
 #define FLAG_AES				(1 << 16)
 #define FLAG_AES_START			(1 << 17)
 
-#define AES_DIRECTION			(1 << 16)
+#define AES_ENCRYPT			(1 << 16)
 #define AES_ENABLED				(1 << 17)
 #define AES_128					(0 << 18)
 #define AES_192					(1 << 18)
@@ -168,7 +176,7 @@ static int cdma_activate(struct cdma_state *_state, int _chan, int _enable)
 	int block = (_chan >> 5);
 	u32 mask = 1 << ((_chan & 0x1f)+1);
 
-	printk("%s: %d %d -> %d %d.\n", __func__, _chan, _enable, block, mask);
+	cdma_dbg(_state, "%s: %d %d -> %d %d.\n", __func__, _chan, _enable, block, mask);
 
 	status = readl(_state->regs + CDMA_STATUS(block));
 	if((status & mask) && !_enable)
@@ -182,10 +190,10 @@ static int cdma_activate(struct cdma_state *_state, int _chan, int _enable)
 		writel(mask, _state->regs + CDMA_ENABLE(block));
 	}
 
-	printk("%s: 0x%08x.\n", __func__, readl(_state->regs + CDMA_STATUS(block)));
+	cdma_dbg(_state, "%s: 0x%08x.\n", __func__, readl(_state->regs + CDMA_STATUS(block)));
 	
 	_state->channels[_chan].active = _enable;
-	return status;
+	return (status & mask)? 1 : 0;
 }
 
 static int cdma_continue(struct cdma_state *_state, int _chan)
@@ -239,7 +247,7 @@ static int cdma_continue(struct cdma_state *_state, int _chan)
 				amt_done += len;
 					cstate->sg_offset += len;
 
-				dev_info(&_state->dev->dev, "generated AES segment: (%p(%u) flags=0x%08x)\n",
+				cdma_dbg(_state, "generated AES segment: (%p(%u) flags=0x%08x)\n",
 						(void*)seg->data, seg->length, seg->flags);
 
 				cdma_next_sg(cstate);
@@ -268,7 +276,7 @@ static int cdma_continue(struct cdma_state *_state, int _chan)
 			seg->length = cstate->sg->length;
 			seg->data = sg_phys(cstate->sg);
 
-			dev_info(&_state->dev->dev, "generated segment: (%p(%u) flags=0x%08x)\n",
+			cdma_dbg(_state, "generated segment: (%p(%u) flags=0x%08x)\n",
 					(void*)seg->data, seg->length, seg->flags);
 
 			cdma_next_sg(cstate);
@@ -288,15 +296,15 @@ static int cdma_continue(struct cdma_state *_state, int _chan)
 	writel(addr, _state->regs + CDMA_CSEGPTR(_chan));
 
 	flags = 0x1C0009;
-	if(cstate->aes)
+	if(cstate->aes_channel)
 	{
-		printk("%s: AES!\n", __func__);
-		flags |= (cstate->aes_channel+1) << 8;
+		cdma_dbg(_state, "%s: AES!\n", __func__);
+		flags |= (cstate->aes_channel << 8);
 	}
 
 	writel(flags, _state->regs + CDMA_CSTATUS(_chan));
 
-	printk("%s: %d 0x%08x.\n", __func__, _chan, readl(_state->regs + CDMA_CSTATUS(_chan)));
+	cdma_dbg(_state, "%s: %d 0x%08x.\n", __func__, _chan, readl(_state->regs + CDMA_CSTATUS(_chan)));
 	return 0;
 }
 
@@ -450,7 +458,7 @@ int cdma_aes(u32 _channel, struct cdma_aes *_aes)
 	struct cdma_state *state;
 	struct cdma_channel_state *cstate;
 	int status;
-	u32 cfg = 0;
+	u32 cfg;
 	u32 type, keytype;
 
 	wait_for_completion(&cdma_completion);
@@ -466,25 +474,26 @@ int cdma_aes(u32 _channel, struct cdma_aes *_aes)
 	if(cstate->aes && !_aes)
 	{
 		state->aes_bitmap &=~ (1 << cstate->aes_channel);
-		cstate->aes_channel = -1;
+		cstate->aes_channel = 0;
 	}
 
 	cstate->aes = _aes;
 	if(!_aes)
 		return 0;
 
-	if(cstate->aes_channel < 0)
+	if(!cstate->aes_channel)
 	{
 		// TODO: lock this?
 
 		int i;
-		for(i = 0; i < 8; i++)
+		for(i = 2; i <= 9; i++)
 		{
 			if(state->aes_bitmap & (1 << i))
 				continue;
 
 			state->aes_bitmap |= (1 << i);
 			cstate->aes_channel = i;
+			break;
 		}
 
 		if(i == 8)
@@ -494,10 +503,10 @@ int cdma_aes(u32 _channel, struct cdma_aes *_aes)
 		}
 	}
 
-	cfg = AES_ENABLED | (_channel & 0xFF) << 8;
+	cfg = AES_ENABLED | (((_channel+1) & 0xFF) << 8);
 
-	if(!_aes->inverse)
-		cfg |= AES_DIRECTION;
+	if(!_aes->decrypt)
+		cfg |= AES_ENCRYPT;
 
 	type = _aes->type;
 	keytype = (type >> 28) & 0xF;
@@ -576,7 +585,7 @@ static irqreturn_t cdma_irq_handler(int _irq, void *_token)
 
 	u32 status = readl(state->regs + CDMA_CSTATUS(chan));
 
-	printk("%s!\n", __func__);
+	cdma_dbg(state, "%s!\n", __func__);
 
 	if(status & CSTATUS_INTERR)
 	{
@@ -699,7 +708,6 @@ static int cdma_probe(struct platform_device *_dev)
 	for(i = 0; i < state->num_channels; i++)
 	{
 		struct cdma_channel_state *cstate = &state->channels[i];
-		cstate->aes_channel = -1;
 		init_completion(&cstate->completion);
 		INIT_LIST_HEAD(&cstate->segments);
 	}
@@ -789,7 +797,7 @@ static int __init cdma_init(void)
 {
 	return platform_driver_register(&cdma_driver);
 }
-module_init(cdma_init);
+arch_initcall(cdma_init);
 
 static void __exit cdma_exit(void)
 {

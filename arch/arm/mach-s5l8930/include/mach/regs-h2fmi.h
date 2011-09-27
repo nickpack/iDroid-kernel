@@ -13,7 +13,7 @@
 
 // Controller regs
 #define H2FMI_ECCFMT		(0x0)
-#define H2FMI_UNK4			(0x4)
+#define H2FMI_CCMD			(0x4)
 #define H2FMI_UNK8			(0x8)
 #define H2FMI_CSTS			(0xC)
 #define H2FMI_CREQ			(0x10)
@@ -27,7 +27,7 @@
 #define H2FMI_TIMING		(0x8)
 #define H2FMI_CHIP_MASK		(0xC)
 #define H2FMI_NREQ			(0x10)
-#define H2FMI_CMD			(0x14)
+#define H2FMI_NCMD			(0x14)
 #define H2FMI_ADDR0			(0x18)
 #define H2FMI_ADDR1			(0x1C)
 #define H2FMI_ADDRMODE		(0x20)
