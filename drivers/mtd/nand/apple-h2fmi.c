@@ -70,13 +70,13 @@ enum h2fmi_write_mode
 
 struct h2fmi_transaction
 {
-	size_t num_pages;
+	size_t count;
 
 	u16 *chips;
 	u32 *pages;
 
-	u8 *buffer;
-	u8 *oobbuf;
+	struct scatterlist *sg_data, *sg_oob;
+	int sg_num_data, sg_num_oob;
 
 	u8 *eccres;
 	u8 *eccbuf;
@@ -336,6 +336,12 @@ static void h2fmi_set_address(struct h2fmi_state *_state, uint32_t _addr)
 	writel(4, _state->flash_regs + H2FMI_ADDRMODE);
 }
 
+static void h2fmi_set_block_address(struct h2fmi_state *_state, uint32_t _addr)
+{
+	writel(_addr & 0xFFFFFF, _state->flash_regs + H2FMI_ADDR0);
+	writel(2, _state->flash_regs + H2FMI_ADDRMODE);
+}
+
 static int h2fmi_readid(struct h2fmi_state *_state, int _id)
 {
 	int ret;
@@ -584,11 +590,9 @@ static u8 h2fmi_calculate_ecc_bits(struct h2fmi_state *_state)
 	return 0;
 }
 
-static int64_t some_math_fn(uint8_t _a, uint8_t _b)
+static inline u32 h2fmi_round_down(u32 _a, u32 _b)
 {
-	u32 ret = (_b/_a);
-	if((ret * _a) != _b)
-		ret++;
+	u32 ret = (_b+_a-1)/_a;
 
 	if(ret == 0)
 		return 0;
@@ -603,7 +607,7 @@ static int h2fmi_setup_timing(struct h2fmi_timing_setup *_timing, u8 *_buffer)
 	int64_t smth = div64_s64(div64_s64(1000000000L, div64_s64((int64_t)_timing->freq, 1000)), 1000);
 	uint8_t r1 = (uint8_t)(_timing->q + _timing->g);
 
-	uint32_t var_28 = some_math_fn(smth, _timing->q + _timing->g);
+	uint32_t var_28 = h2fmi_round_down(smth, _timing->q + _timing->g);
 
 	uint32_t var_2C;
 	if(_timing->p <= var_28 * smth)
@@ -611,7 +615,7 @@ static int h2fmi_setup_timing(struct h2fmi_timing_setup *_timing, u8 *_buffer)
 	else
 		var_2C = _timing->p - (var_28 * smth);
 
-	_buffer[0] = some_math_fn(smth, _timing->k + _timing->g);
+	_buffer[0] = h2fmi_round_down(smth, _timing->k + _timing->g);
 
 	some_time = (_buffer[0] + 1) * smth;
 
@@ -621,12 +625,12 @@ static int h2fmi_setup_timing(struct h2fmi_timing_setup *_timing, u8 *_buffer)
 	lr = (some_time < r1)? r1 - some_time: 0;
 	r4 = (some_time < r3)? r1 - some_time: 0;
 
-	_buffer[1] = some_math_fn(smth, max(_timing->l + _timing->f, lr));
+	_buffer[1] = h2fmi_round_down(smth, max(_timing->l + _timing->f, lr));
 	_buffer[2] = div64_s64((div64_s64((smth + r4 - 1), smth) * smth), smth);
 	_buffer[3] = var_28;
-	_buffer[4] = some_math_fn(smth, max(_timing->f + _timing->r, var_2C));
+	_buffer[4] = h2fmi_round_down(smth, max(_timing->f + _timing->r, var_2C));
 
-	_buffer[2] = 2; // TODO: This is a hack because the above calculation is somehow broken.
+	//_buffer[2] = 2; // TODO: This is a hack because the above calculation is somehow broken.
 	return 0;
 }
 
@@ -673,6 +677,18 @@ static void h2fmi_setup_aes(struct h2fmi_state *_state, int _enabled, int _encry
 		cdma_aes(_state->pdata->dma0, NULL);
 }
 
+static int h2fmi_is_block_bad(struct h2fmi_state *_state, int _ce,
+		int _block)
+{
+	int bb = _block >> 3;
+	int bi = _block & 0x7;
+
+	if(!_state->bbt[_ce])
+		return -ENOENT;
+
+	return (_state->bbt[_ce][bb] & (1 << bi))? 1: 0;
+}
+
 static int h2fmi_block_isbad(struct mtd_info *_mtd, loff_t _ofs)
 {
 	struct h2fmi_state *state = _mtd->priv;
@@ -680,13 +696,7 @@ static int h2fmi_block_isbad(struct mtd_info *_mtd, loff_t _ofs)
 	int page = (_ofs >> state->geo.page_shift) & state->geo.pagemask;
 
 	int block = page / state->geo.pages_per_block;
-	int bb = block >> 3;
-	int bi = block & 0x7;
-
-	if(!state->bbt[chipnr])
-		return 1;
-
-	return (state->bbt[chipnr][bb] & (1 << bi))? 1 : 0;
+	return h2fmi_is_block_bad(state, chipnr, block);
 }
 
 static int h2fmi_block_markbad(struct mtd_info *_mtd, loff_t _ofs)
@@ -708,22 +718,20 @@ static int h2fmi_block_markbad(struct mtd_info *_mtd, loff_t _ofs)
 
 static int h2fmi_rw_large_page(struct h2fmi_state *_state)
 {
-	struct scatterlist pagesg, oobsg;
 	int ret;
 
 	cdma_dir_t dir = (_state->state != H2FMI_READ) ? CDMA_FROM_MEM: CDMA_TO_MEM;
 
-	sg_init_one(&pagesg, _state->transaction.buffer, _state->geo.bytes_per_page);
-	sg_init_one(&oobsg, _state->transaction.oobbuf, _state->geo.oobavail);
-
-	ret = cdma_begin(_state->pdata->dma0, dir, &pagesg, 1,
-			_state->geo.bytes_per_page*_state->transaction.num_pages,
+	ret = cdma_begin(_state->pdata->dma0, dir,
+			_state->transaction.sg_data, _state->transaction.sg_num_data,
+			_state->geo.bytes_per_page*_state->transaction.count,
 			_state->base_dma + H2FMI_DATA0, 4, 8, _state->pdata->pid0);
 	if(ret)
 		return ret;
 
-	ret = cdma_begin(_state->pdata->dma1, dir, &oobsg, 1,
-			_state->geo.oobavail*_state->transaction.num_pages,
+	ret = cdma_begin(_state->pdata->dma1, dir,
+			_state->transaction.sg_oob, _state->transaction.sg_num_oob,
+			_state->geo.oobavail*_state->transaction.count,
 			_state->base_dma + H2FMI_DATA1, 1, 1, _state->pdata->pid1);
 	if(ret)
 	{
@@ -791,7 +799,7 @@ static int h2fmi_read_state_4(struct h2fmi_state *_state)
 	}
 	else
 	{
-		if(_state->transaction.curr < _state->transaction.num_pages)
+		if(_state->transaction.curr < _state->transaction.count)
 		{
 			h2fmi_prepare_transfer(_state);
 			//_fmi->last_action_time = timer_get_system_microtime();
@@ -817,9 +825,9 @@ static int h2fmi_read_state_1(struct h2fmi_state *_state)
 		h2fmi_send_cmd(_state, NAND_CMD_READSTART << 8, 0xb);
 	}
 	else
-		reset_chip = (_state->transaction.curr >= _state->transaction.num_pages)? 0: 1;
+		reset_chip = (_state->transaction.curr >= _state->transaction.count)? 0: 1;
 
-	if(_state->transaction.curr + 1 < _state->transaction.num_pages)
+	if(_state->transaction.curr + 1 < _state->transaction.count)
 	{
 		if(_state->transaction.chips[_state->transaction.curr+1]
 				== _state->transaction.chips[_state->transaction.curr])
@@ -910,8 +918,11 @@ static int h2fmi_read_state_machine(struct h2fmi_state *_state)
 }
 
 // TODO: convert to scatterlist
-static int h2fmi_read_pages(struct h2fmi_state *_state, int _num_pages,
-		u16 *_ces, u32 *_pages, u8 *_buf, u8 *_oobbuf, u8 *_eccres, u8 *_eccbuf)
+static int h2fmi_read_pages(struct h2fmi_state *_state, int _count,
+		u16 *_ces, u32 *_pages,
+		struct scatterlist *_sg_data, size_t _sg_num_data,
+		struct scatterlist *_sg_oob, size_t _sg_num_oob,
+		u8 *_eccres, u8 *_eccbuf)
 {
 	int i, j;
 
@@ -920,12 +931,15 @@ static int h2fmi_read_pages(struct h2fmi_state *_state, int _num_pages,
 
 	memset(&_state->transaction, 0, sizeof(_state->transaction));
 
-	_state->transaction.num_pages = _num_pages;
+	_state->transaction.count = _count;
 	_state->transaction.chips = _ces;
 	_state->transaction.pages = _pages;
 
-	_state->transaction.buffer = _buf;
-	_state->transaction.oobbuf = _oobbuf;
+	_state->transaction.sg_data = _sg_data;
+	_state->transaction.sg_num_data = _sg_num_data;
+
+	_state->transaction.sg_oob = _sg_oob;
+	_state->transaction.sg_num_oob = _sg_num_oob;
 
 	_state->transaction.eccres = _eccres;
 	_state->transaction.eccbuf = _eccbuf;
@@ -957,18 +971,42 @@ static int h2fmi_read_pages(struct h2fmi_state *_state, int _num_pages,
 	_state->state = H2FMI_IDLE;
 	h2fmi_clear_interrupt(_state);
 
-	for(i = 0; i < _num_pages; i++)
+	// metadata whitening
 	{
-		u8 *ptr = _oobbuf + i*_state->mtd.oobsize;
-		u32 *p = (u32*)ptr;
+		struct scatterlist *sg = _state->transaction.sg_oob;
+		int count = _state->transaction.sg_num_oob;
+		size_t sg_off = 0;
 
-		if(!_state->whitening_disabled)
-			for(j = 0; j < 4; j++)
-				p[i] ^= h2fmi_hash_table[(j + _pages[i])
-					% ARRAY_SIZE(h2fmi_hash_table)];
-		
-		for(j = _state->geo.oobavail; j < _state->mtd.oobsize; j++)
-			ptr[j] = 0xFF;
+		for(i = 0; i < _count; i++)
+		{
+			u8 *ptr = sg_virt(sg) + sg_off;
+			u32 *p = (u32*)ptr;
+
+			if(sg->length - sg_off < _state->mtd.oobsize)
+				panic("SG too small for metadata whitening. %d-%d.\n", sg->length, sg_off);
+
+			if(!_state->whitening_disabled)
+				for(j = 0; j < 4; j++)
+					p[i] ^= h2fmi_hash_table[(j + _pages[i])
+						% ARRAY_SIZE(h2fmi_hash_table)];
+			
+			for(j = _state->geo.oobavail; j < _state->mtd.oobsize; j++)
+				ptr[j] = 0xFF;
+
+			sg_off += _state->mtd.oobsize;
+			if(sg_off >= sg->length)
+			{
+				if(count == 0)
+				{
+					printk(KERN_ERR "h2fmi: not enough SGs for metadata!\n");
+					break;
+				}
+
+				sg = sg_next(sg);
+				sg_off = 0;
+				count--;
+			}
+		}
 	}
 
 	if(_state->transaction.result)
@@ -1015,6 +1053,24 @@ static int h2fmi_write_ready(struct h2fmi_state *_state)
 	}
 
 	return 0;
+}
+
+static int h2fmi_erase_prepare(struct h2fmi_state *_state)
+{
+	int ret = h2fmi_prepare_transfer(_state);
+	if(ret)
+		return ret;
+
+	while(1) // TODO: use the interrupts for this? : <
+	{
+		ret = h2fmi_write_ready(_state);
+		if(ret == 0)
+			continue;
+
+		break;
+	}
+
+	return ret;
 }
 
 static inline int h2fmi_write_seqin(struct h2fmi_state *_state, int _page)
@@ -1159,7 +1215,7 @@ static int h2fmi_write_state_3(struct h2fmi_state *_state)
 		h2fmi_wait_req(_state, 2);
 
 		_state->transaction.curr++;
-		if(_state->transaction.curr >= _state->transaction.num_pages)
+		if(_state->transaction.curr >= _state->transaction.count)
 		{
 			_state->write_state = H2FMI_WRITE_4;
 			return h2fmi_write_state_4(_state);
@@ -1247,25 +1303,33 @@ static int h2fmi_write_state_machine(struct h2fmi_state *_state)
 }
 
 // TODO: convert to scatterlist
-static int h2fmi_write_pages(struct h2fmi_state *_state, int _num_pages,
-		u16 *_chips, u32 *_pages, const u8 *_buffer, const u8 *_oobbuf, enum h2fmi_write_mode _mode)
+static int h2fmi_write_pages(struct h2fmi_state *_state, int _count,
+		u16 *_chips, u32 *_pages,
+		struct scatterlist *_sg_data, size_t _sg_num_data,
+		struct scatterlist *_sg_oob, size_t _sg_num_oob,
+		enum h2fmi_write_mode _mode)
 {
 	if(_state->state != H2FMI_IDLE)
 		return -EBUSY;
 
 	memset(&_state->transaction, 0, sizeof(_state->transaction));
 
-	_state->transaction.num_pages = _num_pages;
+	_state->transaction.count = _count;
 	_state->transaction.chips = _chips;
 	_state->transaction.pages = _pages;
 
-	_state->transaction.buffer = (u8*)_buffer;
-	_state->transaction.oobbuf = (u8*)_oobbuf;
+	_state->transaction.sg_data = _sg_data;
+	_state->transaction.sg_num_data = _sg_num_data;
+
+	_state->transaction.sg_oob = _sg_oob;
+	_state->transaction.sg_num_oob = _sg_num_oob;
 
 	_state->transaction.write_mode = _mode;
 
 	_state->state = H2FMI_WRITE;
 	_state->write_state = H2FMI_WRITE_BEGIN;
+
+	// TODO: data whitening?
 
 	h2fmi_reset(_state);
 	h2fmi_set_timing_mode(_state, 1);
@@ -1302,15 +1366,131 @@ static int h2fmi_write_pages(struct h2fmi_state *_state, int _num_pages,
 	return 0;
 }
 
+static int h2fmi_erase_blocks(struct h2fmi_state *_state,
+		int _num, u16 *_ces, u32 *_pages)
+{
+	int i;
+	int eraseOK = 1;
+
+	if(_state->state != H2FMI_IDLE)
+		return -EBUSY;
+
+	memset(&_state->transaction, 0, sizeof(_state->transaction));
+
+	_state->transaction.count = _num;
+	_state->transaction.chips = _ces;
+	_state->transaction.pages = _pages;
+
+	_state->state = H2FMI_ERASE;
+
+	h2fmi_reset(_state);
+	h2fmi_set_timing_mode(_state, 1);
+
+	while(_state->transaction.curr < _state->transaction.count)
+	{
+		int chip = _state->transaction.chips[_state->transaction.curr];
+		int ret;
+
+		if(_state->transaction.chip_mask & (1 << chip))
+		{
+			h2fmi_enable_chip(_state, chip);
+			_state->transaction.curr++;
+
+			ret = h2fmi_erase_prepare(_state);
+
+			if(ret < 0)
+			{
+				dev_err(&_state->dev->dev, 
+						"failed to erase block at %d, err %d.\n",
+						_state->transaction.pages[_state->transaction.curr],
+						ret);
+
+				// TODO: store which chip failed?
+				
+				eraseOK = 0;
+				break;
+			}
+			else
+				_state->transaction.chip_mask &=~ (1 << chip);
+		}
+		else
+		{
+			int i;
+			for(i = _state->transaction.curr;
+					i < _state->transaction.count; i++)
+			{
+				int page;
+				int chip = _state->transaction.chips[i];
+				if(_state->transaction.chip_mask & (1 << chip))
+					break;
+
+				page = _state->transaction.pages[i];
+
+				h2fmi_enable_chip(_state, chip);
+				h2fmi_set_block_address(_state, page);
+				h2fmi_send_cmd(_state, 
+						NAND_CMD_ERASE1
+						| (NAND_CMD_ERASE2 << 8), 0xb);
+
+				_state->transaction.chip_mask |= (1 << chip);
+			}
+		}
+	}
+
+	// flush all of the chips used.
+	for(i = 0; i < _state->transaction.count; i++)
+	{
+		int chip = _state->transaction.chips[i];
+		int ret;
+
+		if(!(_state->transaction.chip_mask & (1 << chip)))
+			continue;
+
+		h2fmi_enable_chip(_state, chip);
+
+		ret = h2fmi_erase_prepare(_state);
+
+		if(ret < 0)
+		{
+			dev_err(&_state->dev->dev, 
+					"failed to erase block at %d, err %d.\n",
+					_state->transaction.pages[_state->transaction.curr],
+					ret);
+
+			// TODO: store which chip failed?
+
+			eraseOK = 0;
+		}
+		else
+			_state->transaction.chip_mask &=~ (1 << chip);
+	}
+
+	h2fmi_reset_timing(_state);
+	h2fmi_disable_bus(_state);
+
+	_state->state = H2FMI_IDLE;
+
+	if(!eraseOK)
+		return -EIO;
+
+	return 0;
+}
+
 static int h2fmi_read_single_page(struct h2fmi_state *_state, int _ce, int _page,
 		u8 *_buffer, int _raw)
 {
+	struct scatterlist sg_buf, sg_oob;
 	u8 *oobbuf = kmalloc(_state->geo.oobavail, GFP_KERNEL);
 	u16 chip = _state->chip_map[_ce];
 	u32 page = _page;
 	int ret;
+
+	sg_init_one(&sg_buf, _buffer, _state->geo.bytes_per_page);
+	sg_init_one(&sg_oob, oobbuf, _state->geo.oobavail);
+
 	h2fmi_setup_aes(_state, !_raw, 0);
-	ret = h2fmi_read_pages(_state, 1, &chip, &page, _buffer, oobbuf, NULL, NULL);
+	ret = h2fmi_read_pages(_state, 1, &chip, &page, &sg_buf, 1, &sg_oob, 1, NULL, NULL);
+
 	kfree(oobbuf);
 	return ret;
 }
@@ -1325,6 +1505,8 @@ static int h2fmi_mtd_read(struct mtd_info *_mtd, loff_t _from, size_t _len,
 	int off = _from & (state->geo.bytes_per_page-1);
 	int cnt = DIV_ROUND_UP(_len + off, state->geo.bytes_per_page);
 	int i, page, ret;
+
+	struct scatterlist sg_data, sg_oob;
 
 	u16 *chips = kmalloc(sizeof(u16)*cnt, GFP_KERNEL);
 	u32 *pages = kmalloc(sizeof(u32)*cnt, GFP_KERNEL);
@@ -1350,7 +1532,10 @@ static int h2fmi_mtd_read(struct mtd_info *_mtd, loff_t _from, size_t _len,
 		buf = kmalloc(cnt*_mtd->writesize, GFP_KERNEL);
 
 	h2fmi_setup_aes(state, 1, 0);
-	ret = h2fmi_read_pages(state, cnt, chips, pages, buf, oobbuf, NULL, NULL);
+
+	sg_init_one(&sg_data, buf, state->geo.bytes_per_page);
+	sg_init_one(&sg_oob, oobbuf, state->geo.oobavail);
+	ret = h2fmi_read_pages(state, cnt, chips, pages, &sg_data, 1, &sg_oob, 1, NULL, NULL);
 
 	if(off)
 	{
@@ -1377,6 +1562,7 @@ static int h2fmi_mtd_write(struct mtd_info *_mtd, loff_t _to, size_t _len,
 	int off = _to & (state->geo.bytes_per_page-1);
 	int cnt = DIV_ROUND_UP(_len + off, state->geo.bytes_per_page);
 	int i, page, ret;
+	struct scatterlist sg_data, sg_oob;
 
 	u16 *chips;
 	u32 *pages;
@@ -1391,6 +1577,8 @@ static int h2fmi_mtd_write(struct mtd_info *_mtd, loff_t _to, size_t _len,
 
 	for(i = 0, page = fst; i < cnt; i++, page++)
 	{
+		// TODO: skip over bad blocks.
+
 		u8 *oob = oobbuf + (_mtd->oobsize*i);
 		int j;
 
@@ -1414,7 +1602,9 @@ static int h2fmi_mtd_write(struct mtd_info *_mtd, loff_t _to, size_t _len,
 	}
 
 	h2fmi_setup_aes(state, 1, 0);
-	ret = h2fmi_write_pages(state, cnt, chips, pages, _buf, oobbuf, H2FMI_WRITE_NORMAL);
+	sg_init_one(&sg_data, _buf, state->geo.bytes_per_page);
+	sg_init_one(&sg_oob, oobbuf, state->geo.oobavail);
+	ret = h2fmi_write_pages(state, cnt, chips, pages, &sg_data, 1, &sg_oob, 1, H2FMI_WRITE_NORMAL);
 
 	*_retlen = _len;
 	
@@ -1422,6 +1612,62 @@ static int h2fmi_mtd_write(struct mtd_info *_mtd, loff_t _to, size_t _len,
 	kfree(pages);
 	kfree(oobbuf);
 	return ret;
+}
+
+static int h2fmi_mtd_erase(struct mtd_info *_mtd, struct erase_info *_erase)
+{
+	struct h2fmi_state *state = _mtd->priv;
+
+	uint64_t addr = _erase->addr;
+	int chipnr = addr >> state->geo.chip_shift;
+	int page = (addr >> state->geo.page_shift) & state->geo.pagemask;
+	int off = addr & (state->geo.bytes_per_page-1);
+	int poff = page & (state->geo.pages_per_block-1);
+	int block = page / state->geo.pages_per_block;
+	int count = _erase->len, numDone=0;
+	int i, ret;
+	u16 *chips;
+	u32 *pages;
+
+	if(off || poff)
+	{
+		dev_err(&state->dev->dev,
+				"erase command not block-aligned: %llu",
+				addr);
+		return -EINVAL;
+	}
+
+	chips = kmalloc(sizeof(u16)*count, GFP_KERNEL);
+	pages = kmalloc(sizeof(u32)*count, GFP_KERNEL);
+	if(!chips || !pages)
+		return -ENOMEM;
+
+	for(i = 0; i < _erase->len; i++)
+	{
+		// Just skip over bad blocks.
+		if(h2fmi_is_block_bad(state, chipnr, block) == 0)
+		{
+			chips[numDone] = chipnr;
+			pages[numDone] = page;
+			numDone++;
+		}
+
+		page += state->geo.pages_per_block;
+		block++;
+		if(page > state->geo.pages_per_ce)
+		{
+			page = 0;
+			block = 0;
+			chipnr++;
+		}
+	}
+
+	if(numDone > 0)
+		ret = h2fmi_erase_blocks(state, numDone, chips, pages);
+
+	kfree(chips);
+	kfree(pages);
+	return 0;
 }
 
 static int h2fmi_read_special_page(struct h2fmi_state *_state, int _ce, char _page[16], uint8_t *_buffer, size_t _sz)
@@ -1731,6 +1977,7 @@ int h2fmi_probe(struct platform_device *_dev)
 		struct mtd_info *mtd = &state->mtd;
 		mtd->read = h2fmi_mtd_read;
 		mtd->write = h2fmi_mtd_write;
+		mtd->erase = h2fmi_mtd_erase;
 
 		// TODO: writev
 
