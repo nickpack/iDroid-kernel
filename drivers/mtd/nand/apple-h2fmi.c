@@ -686,7 +686,7 @@ static int h2fmi_is_block_bad(struct h2fmi_state *_state, int _ce,
 	if(!_state->bbt[_ce])
 		return -ENOENT;
 
-	return (_state->bbt[_ce][bb] & (1 << bi))? 1: 0;
+	return (_state->bbt[_ce][bb] & (1 << bi));
 }
 
 static int h2fmi_block_isbad(struct mtd_info *_mtd, loff_t _ofs)
@@ -1302,7 +1302,6 @@ static int h2fmi_write_state_machine(struct h2fmi_state *_state)
 	return fns[_state->write_state](_state);
 }
 
-// TODO: convert to scatterlist
 static int h2fmi_write_pages(struct h2fmi_state *_state, int _count,
 		u16 *_chips, u32 *_pages,
 		struct scatterlist *_sg_data, size_t _sg_num_data,
@@ -1577,7 +1576,14 @@ static int h2fmi_mtd_write(struct mtd_info *_mtd, loff_t _to, size_t _len,
 
 	for(i = 0, page = fst; i < cnt; i++, page++)
 	{
-		// TODO: skip over bad blocks.
+		int block = page/state->geo.pages_per_block;
+
+		// Skip over bad blocks.
+		if(h2fmi_is_block_bad(state, chipnr, block))
+		{
+			cnt--;
+			page++;
+		}
 
 		u8 *oob = oobbuf + (_mtd->oobsize*i);
 		int j;
@@ -1593,7 +1599,7 @@ static int h2fmi_mtd_write(struct mtd_info *_mtd, loff_t _to, size_t _len,
 		if(i && (!(page & state->geo.pagemask)))
 		{
 			// We passed over a chip boundary
-			page = 0;
+			page &= state->geo.pagemask;
 			chipnr++;
 		}
 
