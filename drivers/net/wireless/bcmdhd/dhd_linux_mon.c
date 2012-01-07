@@ -106,8 +106,10 @@ static struct net_device* lookup_real_netdev(char *name)
 	for (i = 0; i < DHD_MAX_IFS; i++) {
 		ndev = dhd_idx2net(g_monitor.dhd_pub, i);
 		if (ndev && strstr(name, ndev->name)) {
-			if (strlen(ndev->name) > last_name_len)
+			if (strlen(ndev->name) > last_name_len) {
 				ndev_found = ndev;
+				last_name_len = strlen(ndev->name);
+			}
 		}
 	}
 
@@ -223,9 +225,10 @@ static void dhd_mon_if_set_multicast_list(struct net_device *ndev)
 	mon_if = ndev_to_monif(ndev);
 	if (mon_if == NULL || mon_if->real_ndev == NULL) {
 		MON_PRINT(" cannot find matched net dev, skip the packet\n");
+	} else {
+		MON_PRINT("enter, if name: %s, matched if name %s\n",
+		ndev->name, mon_if->real_ndev->name);
 	}
-
-	MON_PRINT("enter, if name: %s, matched if name %s\n", ndev->name, mon_if->real_ndev->name);
 }
 
 static int dhd_mon_if_change_mac(struct net_device *ndev, void *addr)
@@ -236,9 +239,10 @@ static int dhd_mon_if_change_mac(struct net_device *ndev, void *addr)
 	mon_if = ndev_to_monif(ndev);
 	if (mon_if == NULL || mon_if->real_ndev == NULL) {
 		MON_PRINT(" cannot find matched net dev, skip the packet\n");
+	} else {
+		MON_PRINT("enter, if name: %s, matched if name %s\n",
+		ndev->name, mon_if->real_ndev->name);
 	}
-
-	MON_PRINT("enter, if name: %s, matched if name %s\n", ndev->name, mon_if->real_ndev->name);
 	return ret;
 }
 
