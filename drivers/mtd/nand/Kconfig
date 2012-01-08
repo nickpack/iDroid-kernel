@@ -554,11 +554,4 @@ config MTD_NAND_FSMC
 	  Enables support for NAND Flash chips on the ST Microelectronics
 	  Flexible Static Memory Controller (FSMC)
 
-config MTD_NAND_H2FMI
-	tristate "Support for Apple's H2FMI NAND controller"
-	depends on PLAT_S5L
-	help
-		Enables support for NAND Flash chips connected to an Apple
-		H2FMI controller.
-
 endif # MTD_NAND

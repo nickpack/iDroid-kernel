@@ -1,0 +1,32 @@
+if BLK_DEV_APPLE
+
+config BLK_DEV_APPLE_VSVFL
+	tristate "Apple VSVFL support"
+	---help---
+		Includes support for flash memory
+		with VSVFL formatting.
+
+config BLK_DEV_APPLE_LEGACY_VFL
+	tristate "Apple Legacy VFL support"
+	---help---
+		Includes support for flash memory
+		formatted with Apple's legacy
+		VFL.
+
+config BLK_DEV_APPLE_YAFTL
+	tristate "Apple YAFTL support"
+	depends on BLK_DEV_APPLE_VSVFL
+
+config BLK_DEV_APPLE_LEGACY_FTL
+	tristate "Apple Legacy FTL support"
+	depends on BLK_DEV_APPLE_VSVFL || BLK_DEV_APPLE_LEGACY_VFL
+
+config BLK_DEV_H2FMI
+	tristate "Apple H2FMI driver"
+	depends on PLAT_S5L
+
+config BLK_DEV_S5L8900
+	tristate "Apple S5L8900 NAND driver"
+	depends on PLAT_S5L
+
+endif
