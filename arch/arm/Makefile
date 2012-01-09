@@ -196,6 +196,10 @@ machine-$(CONFIG_MACH_SPEAR300)		:= spear3xx
 machine-$(CONFIG_MACH_SPEAR310)		:= spear3xx
 machine-$(CONFIG_MACH_SPEAR320)		:= spear3xx
 machine-$(CONFIG_MACH_SPEAR600)		:= spear6xx
+machine-$(CONFIG_MACH_IPHONE_4)		:= s5l8930
+machine-$(CONFIG_MACH_IPOD_TOUCH_4G)		:= s5l8930
+machine-$(CONFIG_MACH_IPAD_1G)		:= s5l8930
+machine-$(CONFIG_MACH_APPLETV_2G)		:= s5l8930
 
 # Platform directory name.  This list is sorted alphanumerically
 # by CONFIG_* macro name.

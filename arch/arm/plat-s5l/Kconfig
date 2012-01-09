@@ -19,6 +19,7 @@ config PLAT_S5L
 	select SAMSUNG_IRQ_VIC_TIMER
 	select SAMSUNG_IRQ_UART
 	select GENERIC_CLOCKEVENTS
+	select GENERIC_IRQ_CHIP
 	help
 	  Base platform code for Samsung's S5L series SoC.
 

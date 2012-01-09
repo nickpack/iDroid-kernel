@@ -15,11 +15,11 @@
 
 #define IRQ_TIMER	0x11
 
-#define IRQ_TIMER0	300
-#define IRQ_TIMER1	301
-#define IRQ_TIMER2	302
-#define IRQ_TIMER3	303
-#define IRQ_TIMER4	304
+#define IRQ_TIMER0_VIC	300
+#define IRQ_TIMER1_VIC	301
+#define IRQ_TIMER2_VIC	302
+#define IRQ_TIMER3_VIC	303
+#define IRQ_TIMER4_VIC	304
 
 #define IRQ_CDMA0	0x31
 #define IRQ_CDMA36	0x55

@@ -287,6 +287,12 @@ static struct s3c2410_uartcfg s5l8930_uartcfgs[] __initdata = {
 	},
 };
 
+// TODO: This might need implementing!
+void s3c_setup_uart_cfg_gpio(unsigned char port)
+{
+}
+EXPORT_SYMBOL(s3c_setup_uart_cfg_gpio);
+
 void __init s5l8930_map_io(void)
 {
 	s3c_init_cpu(0x8930, cpu_id, ARRAY_SIZE(cpu_id));
@@ -305,7 +311,7 @@ void __init s5l8930_init_irq(void)
 {
 	printk("%s\n", __func__);
 	s5l_init_vics(s5l8930_vics, ARRAY_SIZE(s5l8930_vics));
-	s3c_init_vic_timer_irq(IRQ_TIMER, IRQ_TIMER0);
+	s3c_init_vic_timer_irq(1, IRQ_TIMER);
 	printk("%s done\n", __func__);
 }
 
