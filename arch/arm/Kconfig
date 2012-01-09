@@ -677,6 +677,11 @@ config ARCH_SA1100
 	help
 	  Support for StrongARM 11x0 based boards.
 
+config ARCH_S5L
+	bool "Samsung S5L"
+	help
+	  Support for Samsung S5LXXXX chips.
+
 config ARCH_S3C2410
 	bool "Samsung S3C2410, S3C2412, S3C2413, S3C2416, S3C2440, S3C2442, S3C2443, S3C2450"
 	select GENERIC_GPIO
