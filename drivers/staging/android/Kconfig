@@ -11,18 +11,22 @@ if ANDROID
 config ANDROID_BINDER_IPC
 	bool "Android Binder IPC Driver"
 	default n
+	depends on ANDROID
 
 config ANDROID_LOGGER
 	tristate "Android log driver"
 	default n
+	depends on ANDROID
 
 config ANDROID_RAM_CONSOLE
 	bool "Android RAM buffer console"
 	default n
+	depends on ANDROID
 
 config ANDROID_RAM_CONSOLE_ENABLE_VERBOSE
 	bool "Enable verbose console messages on Android RAM console"
 	default y
+	depends on ANDROID
 	depends on ANDROID_RAM_CONSOLE
 
 menuconfig ANDROID_RAM_CONSOLE_ERROR_CORRECTION
@@ -30,6 +34,7 @@ menuconfig ANDROID_RAM_CONSOLE_ERROR_CORRECTION
 	default n
 	depends on ANDROID_RAM_CONSOLE
 	depends on !ANDROID_RAM_CONSOLE_EARLY_INIT
+	depends on ANDROID
 	select REED_SOLOMON
 	select REED_SOLOMON_ENC8
 	select REED_SOLOMON_DEC8
@@ -39,16 +44,19 @@ if ANDROID_RAM_CONSOLE_ERROR_CORRECTION
 config ANDROID_RAM_CONSOLE_ERROR_CORRECTION_DATA_SIZE
 	int "Android RAM Console Data data size"
 	default 128
+	depends on ANDROID
 	help
 	  Must be a power of 2.
 
 config ANDROID_RAM_CONSOLE_ERROR_CORRECTION_ECC_SIZE
 	int "Android RAM Console ECC size"
 	default 16
+	depends on ANDROID
 
 config ANDROID_RAM_CONSOLE_ERROR_CORRECTION_SYMBOL_SIZE
 	int "Android RAM Console Symbol size"
 	default 8
+	depends on ANDROID
 
 config ANDROID_RAM_CONSOLE_ERROR_CORRECTION_POLYNOMIAL
 	hex "Android RAM Console Polynomial"
@@ -57,6 +65,7 @@ config ANDROID_RAM_CONSOLE_ERROR_CORRECTION_POLYNOMIAL
 	default 0x61 if (ANDROID_RAM_CONSOLE_ERROR_CORRECTION_SYMBOL_SIZE = 6)
 	default 0x89 if (ANDROID_RAM_CONSOLE_ERROR_CORRECTION_SYMBOL_SIZE = 7)
 	default 0x11d if (ANDROID_RAM_CONSOLE_ERROR_CORRECTION_SYMBOL_SIZE = 8)
+	depends on ANDROID
 
 endif # ANDROID_RAM_CONSOLE_ERROR_CORRECTION
 
@@ -64,20 +73,24 @@ config ANDROID_RAM_CONSOLE_EARLY_INIT
 	bool "Start Android RAM console early"
 	default n
 	depends on ANDROID_RAM_CONSOLE
+	depends on ANDROID
 
 config ANDROID_RAM_CONSOLE_EARLY_ADDR
 	hex "Android RAM console virtual address"
 	default 0
 	depends on ANDROID_RAM_CONSOLE_EARLY_INIT
+	depends on ANDROID
 
 config ANDROID_RAM_CONSOLE_EARLY_SIZE
 	hex "Android RAM console buffer size"
 	default 0
 	depends on ANDROID_RAM_CONSOLE_EARLY_INIT
+	depends on ANDROID
 
 config ANDROID_TIMED_OUTPUT
 	bool "Timed output class driver"
 	default y
+	depends on ANDROID
 
 config ANDROID_TIMED_GPIO
 	tristate "Android timed gpio driver"
@@ -87,6 +100,7 @@ config ANDROID_TIMED_GPIO
 config ANDROID_LOW_MEMORY_KILLER
 	bool "Android Low Memory Killer"
 	default N
+	depends on ANDROID
 	---help---
 	  Register processes to be killed when memory is low
 

@@ -1,0 +1,18 @@
+config CPU_S5L8900
+	bool
+	select PLAT_S5L
+	select CPU_V6
+	select S5P_EXT_INT
+	select S3C_PL330_DMA
+	select MFD_PCF50633
+	select PCF50633_ADC
+	select PCF50633_GPIO
+	select CHARGER_PCF50633
+	select BACKLIGHT_PCF50633
+	select REGULATOR_PCF50633
+	select RTC_DRV_PCF50633
+	select RTC_DRV_PCF50633_OFFSET
+	select INPUT_PCF50633_PMU
+	help
+	  Enable S5L8900 CPU support
+

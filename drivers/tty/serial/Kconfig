@@ -1635,4 +1635,9 @@ config SERIAL_XILINX_PS_UART_CONSOLE
 	help
 	  Enable a Xilinx PS UART port to be the system console.
 
+config SERIAL_APPLE_IPHONE
+	tristate "Apple iPhone serial support"
+	depends on PLAT_S5L
+	select SERIAL_CORE
+
 endmenu
