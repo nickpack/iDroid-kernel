@@ -528,6 +528,18 @@ config APANIC_PLABEL
 	 If your platform uses a different flash partition label for storing
  	 crashdumps, enter it here.
 
+config IPHONE_3G_VIBRATOR
+	tristate "iPhone 3G Vibrator"
+	depends on PLAT_S5L
+	select ANDROID_TIMED_OUTPUT
+
+config SENSORS_LIS331DL
+	tristate "STMicroeletronics LIS331DL three-axis digital accelerometer"
+	depends on I2C
+	---help---
+	 If you say yes here you get support for the LIS331DL three-axis digital accelerometer
+	 Device can be configured using sysfs.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

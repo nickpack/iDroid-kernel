@@ -1,0 +1,51 @@
+# Copyright (c) 2011 Richard Ian Taylor
+#
+#	This file is part of the iDroid Project 
+#	(http://www.idroidproject.org/).
+
+config CPU_S5L8930
+	bool
+	select PLAT_S5L
+	select S5L_IRQ
+	select CPU_V7
+	select SERIAL_SAMSUNG
+	select SERIAL_S5L8900
+	select S3C_DEV_I2C1
+	select S3C_DEV_HSMMC
+	select S3C_DEV_USB_HSOTG
+	select SPI_S5L
+	select S5L_CDMA
+	select USB_GADGET_S3C_HSOTG
+	select KEYBOARD_GPIO
+	help
+	  Enable S5L8930 CPU support
+
+config MACH_IPHONE_4
+	bool "iPhone 4"
+	select CPU_S5L8930
+	select TOUCHSCREEN_ZEPHYR2
+	help
+	  Enable support for the iPhone 4.
+
+config MACH_IPOD_TOUCH_4G
+	bool "iPod Touch 4G"
+	select CPU_S5L8930
+	select TOUCHSCREEN_ZEPHYR2
+	help
+	  Enable support for the 4th generation
+	  iPod Touch.
+
+config MACH_IPAD_1G
+	bool "iPad 1G"
+	select CPU_S5L8930
+	select TOUCHSCREEN_ZEPHYR2
+	help
+	  Enable support for the 1st generation
+	  iPad.
+
+config MACH_APPLETV_2G
+	bool "AppleTV 2G"
+	select CPU_S5L8930
+	help
+	  Enable support for the 2nd generation
+	  AppleTV.

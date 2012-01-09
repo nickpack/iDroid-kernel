@@ -1,0 +1,2169 @@
+/**
+ * Copyright (c) 2011 Richard Ian Taylor.
+ *
+ * This file is part of the iDroid Project. (http://www.idroidproject.org).
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
+
+#include <linux/mtd/mtd.h>
+#include <linux/mtd/nand.h>
+#include <linux/platform_device.h>
+#include <linux/clk.h>
+#include <linux/delay.h>
+#include <linux/io.h>
+#include <linux/interrupt.h>
+#include <linux/slab.h>
+#include <linux/err.h>
+#include <linux/log2.h>
+#include <linux/kernel.h>
+
+#include <plat/h2fmi.h>
+#include <plat/cdma.h>
+#include <mach/clock.h>
+#include <mach/regs-h2fmi.h>
+
+#define H2FMI_MAX_CHIPS			8
+
+static uint32_t h2fmi_hash_table[256];
+
+enum h2fmi_status
+{
+	H2FMI_IDLE=0,
+	H2FMI_READ,
+	H2FMI_WRITE,
+	H2FMI_ERASE
+};
+
+enum h2fmi_read_state
+{
+	H2FMI_READ_BEGIN=0,
+	H2FMI_READ_1,
+	H2FMI_READ_2,
+	H2FMI_READ_3,
+	H2FMI_READ_4,
+	H2FMI_READ_COMPLETE
+};
+
+enum h2fmi_write_state
+{
+	H2FMI_WRITE_BEGIN=0,
+	H2FMI_WRITE_1,
+	H2FMI_WRITE_2,
+	H2FMI_WRITE_3,
+	H2FMI_WRITE_4,
+	H2FMI_WRITE_5,
+	H2FMI_WRITE_COMPLETE
+};
+
+enum h2fmi_write_mode
+{
+	H2FMI_WRITE_NORMAL=0,
+	H2FMI_WRITE_MODE_1,
+	H2FMI_WRITE_MODE_2,
+	H2FMI_WRITE_MODE_3,
+	H2FMI_WRITE_MODE_4,
+	H2FMI_WRITE_MODE_5,
+};
+
+struct h2fmi_transaction
+{
+	size_t count;
+
+	u16 *chips;
+	u32 *pages;
+
+	struct scatterlist *sg_data, *sg_oob;
+	int sg_num_data, sg_num_oob;
+
+	u8 *eccres;
+	u8 *eccbuf;
+
+	size_t num_failed;
+	size_t num_ecc;
+	size_t num_empty;
+
+	size_t curr;
+	int result;
+
+	unsigned chip_mask;
+
+	unsigned busy: 1;
+	unsigned new_chip: 1;
+
+	enum h2fmi_write_mode write_mode;
+};
+
+struct h2fmi_geometry
+{
+	uint32_t num_bus;
+	uint16_t num_ce;
+	uint16_t blocks_per_ce;
+	uint32_t pages_per_ce;
+	uint16_t pages_per_block;
+	uint16_t bytes_per_page;
+	uint16_t ecc_steps;
+	uint16_t bytes_per_spare;
+	uint16_t banks_per_ce_vfl;
+	uint16_t banks_per_ce;
+	uint16_t blocks_per_bank;
+	uint16_t bank_address_space;
+	uint16_t total_block_space;
+	uint32_t vendor_type;
+
+	int chip_shift, page_shift;
+	int pagemask, pageoffmask;
+
+	uint64_t chip_size;
+
+	u32 oobavail, oobfree, oobsize;
+};
+
+struct h2fmi_timing_setup
+{
+	uint64_t freq;
+	uint32_t c;
+	uint32_t d;
+	uint32_t e;
+	uint32_t f;
+	uint32_t g;
+	uint32_t h;
+	uint32_t i;
+	uint32_t j;
+	uint32_t k;
+	uint32_t l;
+	uint32_t m;
+	uint32_t n;
+	uint32_t o;
+	uint32_t p;
+	uint32_t q;
+	uint32_t r;
+};
+
+struct h2fmi_state
+{
+	struct platform_device *dev;
+	struct h2fmi_platform_data *pdata;
+
+	struct mtd_info mtd;
+
+	struct h2fmi_chip_info *chip_info;
+	struct h2fmi_board_info *board_info;
+	struct h2fmi_timing_info *timing_info;
+
+	struct nand_ecclayout ecc;
+	struct h2fmi_geometry geo;
+	struct cdma_aes aes;
+
+	enum h2fmi_status state;
+	enum h2fmi_read_state read_state;
+	enum h2fmi_write_state write_state;
+	struct h2fmi_transaction transaction;
+
+	void *__iomem base_regs;
+	void *__iomem flash_regs;
+	void *__iomem ecc_regs;
+
+	dma_addr_t base_dma, flash_dma, ecc_dma;
+
+	struct clk *clk, *clk_bch;
+
+	struct work_struct detect_work;
+
+	int irq;
+
+	uint32_t read_buf;
+	int read_buf_left;
+
+	struct h2fmi_board_id board_id;
+
+	int num_chips;
+	unsigned int bitmap;
+	int chip_map[H2FMI_MAX_CHIPS];
+	u8 *bbt[H2FMI_MAX_CHIPS];
+
+	uint32_t timing;
+
+	int ecc_step_shift;
+
+	unsigned whitening_disabled: 1;
+
+	u32 page_fmt;
+	u32 ecc_fmt;
+	uint8_t ecc_bits;
+	uint8_t ecc_tag;
+};
+
+static struct nand_ecclayout h2fmi_ecc_layout = {
+	.oobavail = 0xc,
+	.oobfree = { { .length = 0xa, } },
+};
+
+static inline void h2fmi_set_timing_mode(struct h2fmi_state *_state, int _en)
+{
+	u32 val = readl(_state->flash_regs + H2FMI_TIMING)
+		&~ (1 << 21);
+
+	if(_en)
+		val |= (1 << 21);
+
+	writel(val, _state->flash_regs + H2FMI_TIMING);
+}
+
+static inline void h2fmi_reset_timing(struct h2fmi_state *_state)
+{
+	writel(_state->timing, _state->flash_regs + H2FMI_TIMING);
+}
+
+static void h2fmi_clear_interrupt(struct h2fmi_state *_state)
+{
+	writel(0, _state->flash_regs + H2FMI_UNK440);
+	writel(0, _state->base_regs + H2FMI_CREQ);
+	writel(0x31FFFF, _state->flash_regs + H2FMI_NSTS);
+	writel(0xF, _state->base_regs + H2FMI_CSTS);
+}
+
+static void h2fmi_reset(struct h2fmi_state *_state)
+{
+	s5l_clock_gate_reset(_state->clk);
+
+	writel(6, _state->base_regs + H2FMI_CCMD);
+	writel(1, _state->flash_regs + H2FMI_RESET);
+	writel(_state->timing, _state->flash_regs + H2FMI_TIMING);
+
+	_state->read_buf_left = 0;
+}
+
+static void h2fmi_init(struct h2fmi_state *_state)
+{
+	_state->timing = 0xFFFFF;
+	writel(_state->timing, _state->flash_regs + H2FMI_TIMING);
+
+	h2fmi_reset(_state);
+}
+
+static inline void h2fmi_enable_chip(struct h2fmi_state *_state, int _chip)
+{
+	writel(readl(_state->flash_regs + H2FMI_CHIP_MASK) | (1 << _chip),
+			_state->flash_regs + H2FMI_CHIP_MASK);
+}
+
+static inline void h2fmi_disable_chip(struct h2fmi_state *_state, int _chip)
+{
+	writel(readl(_state->flash_regs + H2FMI_CHIP_MASK) &~ (1 << _chip),
+			_state->flash_regs + H2FMI_CHIP_MASK);
+}
+
+static inline void h2fmi_disable_bus(struct h2fmi_state *_state)
+{
+	writel(0, _state->flash_regs + H2FMI_CHIP_MASK);
+}
+
+static int h2fmi_wait(struct h2fmi_state *_state, void *__iomem _reg,
+		uint32_t _mask, uint32_t _val)
+{
+	int i;
+
+	for(i = 0; i < 10 && ((readl(_reg) & _mask) != _val); i++)
+		msleep(10);
+
+	if(i == 10)
+		return -ETIMEDOUT;
+
+	writel(_val, _reg);
+	return 0;
+}
+
+static int h2fmi_reset_this(struct h2fmi_state *_state)
+{
+	writel(NAND_CMD_RESET, _state->flash_regs + H2FMI_NCMD);
+	writel(1, _state->flash_regs + H2FMI_NREQ);
+
+	return h2fmi_wait(_state, _state->flash_regs + H2FMI_NSTS, 1, 1);
+}
+
+static int h2fmi_reset_chip(struct h2fmi_state *_state, int _chip)
+{
+	int ret;
+	h2fmi_enable_chip(_state, _chip);
+	ret = h2fmi_reset_this(_state);
+	h2fmi_disable_chip(_state, _chip);
+	return ret;
+}
+
+static int h2fmi_reset_all(struct h2fmi_state *_state)
+{
+	int ret;
+	int i;
+
+	for(i = 0; i < H2FMI_MAX_CHIPS; i++)
+	{
+		ret = h2fmi_reset_chip(_state, i);
+		if(ret)
+			return ret;
+	}
+	
+	msleep(50);
+	return ret;
+}
+
+static inline int h2fmi_wait_req(struct h2fmi_state *_state, u32 _bits)
+{
+	writel(_bits, _state->flash_regs + H2FMI_NREQ);
+	return h2fmi_wait(_state, _state->flash_regs + H2FMI_NSTS, _bits, _bits);
+}
+
+static inline void h2fmi_wait_req_clear(struct h2fmi_state *_state)
+{
+	writel(0, _state->flash_regs + H2FMI_NREQ);
+}
+
+static inline int h2fmi_send_cmd(struct h2fmi_state *_state, u32 _cmd, u32 _mask)
+{
+	writel(_cmd, _state->flash_regs + H2FMI_NCMD);
+	if(!_mask)
+		return 0;
+
+	return h2fmi_wait_req(_state, _mask);
+}
+
+static void h2fmi_set_address(struct h2fmi_state *_state, uint32_t _addr)
+{
+	writel((_addr >> 16) & 0xFF, _state->flash_regs + H2FMI_ADDR1);
+	writel(((_addr & 0xFF) << 16) | ((_addr >> 8) << 24), _state->flash_regs + H2FMI_ADDR0);
+	writel(4, _state->flash_regs + H2FMI_ADDRMODE);
+}
+
+static void h2fmi_set_block_address(struct h2fmi_state *_state, uint32_t _addr)
+{
+	writel(_addr & 0xFFFFFF, _state->flash_regs + H2FMI_ADDR0);
+	writel(2, _state->flash_regs + H2FMI_ADDRMODE);
+}
+
+static int h2fmi_readid(struct h2fmi_state *_state, int _id)
+{
+	int ret;
+	writel(NAND_CMD_READID, _state->flash_regs + H2FMI_NCMD);
+	writel(_id, _state->flash_regs + H2FMI_ADDR0);
+	writel(0, _state->flash_regs + H2FMI_ADDRMODE);
+	writel(9, _state->flash_regs + H2FMI_NREQ);
+
+	ret = h2fmi_wait(_state, _state->flash_regs + H2FMI_NSTS, 9, 9);
+	if(ret)
+		return ret;
+
+	writel(0x801, _state->base_regs + H2FMI_PAGEFMT);
+	writel(3, _state->base_regs + H2FMI_CCMD);
+	ret = h2fmi_wait(_state, _state->base_regs + H2FMI_CSTS, 2, 2);
+	return ret;
+}
+
+static void h2fmi_read(struct h2fmi_state *_state, void *_buff, size_t _sz)
+{
+	uint32_t *u32b;
+	uint8_t *u8b;
+	int u32amt;
+	int i;
+	int left = _sz;
+
+	if(_state->read_buf_left)
+	{
+		uint32_t amt = min(_sz, (size_t)_state->read_buf_left);
+		memcpy(_buff, &_state->read_buf, amt);
+		_state->read_buf >>= (8*amt);
+
+		_state->read_buf_left -= amt;
+		_buff += amt;
+		left -= amt;
+	}
+
+	if(!left)
+		return;
+
+	u32b = _buff;
+	u32amt = left >> 2;
+	left -= u32amt*sizeof(u32);
+
+	for(i = 0; i < u32amt; i++)
+		u32b[i] = readl(_state->base_regs + H2FMI_DATA0);
+
+	if(!left)
+		return;
+
+	u8b = _buff + (sizeof(u32)*u32amt);
+	_state->read_buf = readl(_state->base_regs + H2FMI_DATA0);
+	_state->read_buf_left = 4-left;
+	memcpy(u8b, &_state->read_buf, left);
+	_state->read_buf >>= left*8;
+
+	return;
+}
+
+static void h2fmi_write(struct h2fmi_state *_state, const void *_buffer, size_t _sz)
+{
+	const u8 *u8b;
+	const uint32_t *u32b = _buffer;
+	int u32amt = _sz >> 2;
+	int i;
+	u32 left;
+
+	_sz -= (u32amt * sizeof(u32));
+
+	for(i = 0; i < u32amt; i++)
+		writel(u32b, _state->base_regs + H2FMI_DATA0);
+
+	if(!_sz)
+		return;
+	
+	u8b = _buffer + (sizeof(u32)*u32amt);
+	left = 0;
+	for(i = 0; i < _sz; i++)
+		left |= (u8b[i] << (i*8));
+	writel(left, _state->base_regs + H2FMI_DATA0);
+}
+
+static inline void h2fmi_clear_ecc_sts(struct h2fmi_state *_state)
+{
+	writel(0x1a8, _state->ecc_regs + H2FMI_ECCSTS);
+}
+
+static inline void h2fmi_clear_ecc_buf(struct h2fmi_state *_state)
+{
+	writel(1, _state->ecc_regs + H2FMI_ECCBUF);
+	h2fmi_clear_ecc_sts(_state);
+}
+
+static void h2fmi_set_format(struct h2fmi_state *_state, u32 _bits)
+{
+	writel(_state->ecc_fmt, _state->base_regs + H2FMI_ECCFMT);
+	writel(_state->page_fmt, _state->base_regs + H2FMI_PAGEFMT);
+	writel(((_bits & 0x1f) << 8) | 0x20000, _state->ecc_regs + H2FMI_ECCCFG);
+}
+
+static int h2fmi_check_ecc(struct h2fmi_state *_state)
+{
+	int num_empty = 0;
+	int num_failed = 0;
+	int len = _state->geo.ecc_steps;
+	int i;
+	u8 *eptr = _state->transaction.eccbuf
+		+ (_state->transaction.curr * _state->geo.ecc_steps);
+
+	int eccsts = readl(_state->ecc_regs + H2FMI_ECCSTS);
+	writel(eccsts, _state->ecc_regs + H2FMI_ECCSTS);
+
+	dev_info(&_state->dev->dev, "ecc-sts: 0x%08x.\n", eccsts);
+
+	if(_state->transaction.eccres)
+		_state->transaction.eccres
+			[_state->transaction.curr] = (eccsts >> 16) & 0x1f;
+
+	for(i = 0; i < len; i++)
+	{
+		u32 buf = readl(_state->ecc_regs + H2FMI_ECCBUF);
+		u8 val;
+		
+		if(buf & 2)
+		{
+			val = 0xFE;
+			num_empty++;
+		}
+		else if(buf & 4)
+		{
+			val = 0xFF;
+			num_failed++;
+		}
+		else if(buf & 1)
+			val = 0xFF;
+		else
+			val = (buf >> 16) & 0x1F;
+
+		if(eptr)
+			eptr[i] = val;
+	}
+
+	writel(readl(_state->base_regs + H2FMI_CCMD) &~ (1 << 7),
+			_state->base_regs + H2FMI_CCMD);
+
+	if(num_empty == len)
+	{
+		_state->transaction.num_empty++;
+		return 1;
+	}
+
+	if(num_failed == len)
+	{
+		_state->transaction.num_failed++;
+		return -EIO;
+	}
+
+	if(eccsts & 8)
+	{
+		_state->transaction.num_ecc++;
+		return -EUCLEAN;
+	}
+
+	return 0;
+}
+
+static int h2fmi_prepare(struct h2fmi_state *_state, u8 _a, u8 _b)
+{
+	int ret;
+
+	writel(readl(_state->flash_regs + H2FMI_TIMING) &~ 0x100000,
+			_state->flash_regs + H2FMI_TIMING);
+	writel(_a | (_b << 8), _state->flash_regs + H2FMI_UNK44C);
+
+	ret = h2fmi_send_cmd(_state, NAND_CMD_STATUS, 0x1);
+	if(ret)
+		return ret;
+
+	h2fmi_clear_interrupt(_state);
+
+	writel(0, _state->flash_regs + H2FMI_UNKREG8);
+	writel(0x50, _state->flash_regs + H2FMI_NREQ);
+
+	return 0;
+}
+
+static int h2fmi_setup_transfer(struct h2fmi_state *_state)
+{
+	if(_state->state != H2FMI_READ)
+	{
+		h2fmi_set_format(_state, _state->ecc_bits+1);
+		h2fmi_clear_ecc_sts(_state);
+	}
+	else
+		h2fmi_set_format(_state, 0xF);
+
+	return 0;
+}
+
+static int h2fmi_prepare_transfer(struct h2fmi_state *_state)
+{
+	int ret = h2fmi_prepare(_state, 0x40, 0x40);
+	if(ret)
+		return ret;
+	
+	writel(0x20, _state->flash_regs + H2FMI_UNK440);
+	writel(0x100, _state->base_regs + H2FMI_CREQ);
+	return 0;
+}
+
+static int h2fmi_transfer_ready(struct h2fmi_state *_state)
+{
+	if(readl(_state->base_regs + H2FMI_CSTS) & 0x100)
+		return 1;
+	else
+	{
+		//if(timer_get_system_microtime() - _fmi->last_action_time > _fmi->time_interval)
+		//	return -ETIMEDOUT;
+
+		return 0;
+	}
+}
+
+static irqreturn_t h2fmi_irq_handler(int _irq, void *_dev)
+{
+	struct h2fmi_state *state = _dev;
+	dev_info(&state->dev->dev, "irq!\n");
+	return IRQ_HANDLED;
+}
+
+static u8 h2fmi_calculate_ecc_bits(struct h2fmi_state *_state)
+{
+	uint32_t ecc_block_size = (_state->geo.bytes_per_spare - _state->geo.oobavail)
+		/ (_state->geo.bytes_per_page >> _state->ecc_step_shift);
+	static uint8_t some_array[] = { 0x35, 0x1E, 0x33, 0x1D, 0x2C, 0x19, 0x1C, 0x10, 0x1B, 0xF };
+
+	int i;
+	for(i = 0; i < sizeof(some_array)/sizeof(uint8_t); i += 2)
+	{
+		if(ecc_block_size >= some_array[i])
+			return some_array[i+1];
+	}
+
+	dev_err(&_state->dev->dev, "calculating ecc bits failed (0x%08x, 0x%08x, 0x%08x) -> 0x%08x.\r\n",
+			_state->geo.bytes_per_spare, _state->geo.oobavail, _state->geo.bytes_per_page, ecc_block_size);
+	return 0;
+}
+
+static inline u32 h2fmi_round_down(u32 _a, u32 _b)
+{
+	u32 ret = (_b+_a-1)/_a;
+
+	if(ret == 0)
+		return 0;
+
+	return ret - 1;
+}
+
+static int h2fmi_setup_timing(struct h2fmi_timing_setup *_timing, u8 *_buffer)
+{
+	u32 some_time, lr, r4, r3;
+
+	int64_t smth = div64_s64(div64_s64(1000000000L, div64_s64((int64_t)_timing->freq, 1000)), 1000);
+	uint8_t r1 = (uint8_t)(_timing->q + _timing->g);
+
+	uint32_t var_28 = h2fmi_round_down(smth, _timing->q + _timing->g);
+
+	uint32_t var_2C;
+	if(_timing->p <= var_28 * smth)
+		var_2C = 0;
+	else
+		var_2C = _timing->p - (var_28 * smth);
+
+	_buffer[0] = h2fmi_round_down(smth, _timing->k + _timing->g);
+
+	some_time = (_buffer[0] + 1) * smth;
+
+	r3 = _timing->m + _timing->h + _timing->g;
+	r1 = max(_timing->j, r3);
+	
+	lr = (some_time < r1)? r1 - some_time: 0;
+	r4 = (some_time < r3)? r1 - some_time: 0;
+
+	_buffer[1] = h2fmi_round_down(smth, max(_timing->l + _timing->f, lr));
+	_buffer[2] = div64_s64((div64_s64((smth + r4 - 1), smth) * smth), smth);
+	_buffer[3] = var_28;
+	_buffer[4] = h2fmi_round_down(smth, max(_timing->f + _timing->r, var_2C));
+
+	//_buffer[2] = 2; // TODO: This is a hack because the above calculation is somehow broken.
+	return 0;
+}
+
+static void h2fmi_aes_gen_iv(void *_param, u32 _segment, u32 *_iv)
+{
+	struct h2fmi_state *state = _param;
+	u32 val = state->transaction.pages[state->transaction.curr];
+	int i;
+
+	for(i = 0; i < 4; i++)
+	{
+		if(val & 1)
+			val = (val >> 1) ^ 0x80000001;
+		else
+			val >>= 1;
+
+		_iv[i] = val;
+	}
+}
+
+static u32 h2fmi_aes_key[] = {
+	0xAB42A792,
+	0xBF69C908,
+	0x12946C00,
+	0xA579CCD3,
+};
+
+static void h2fmi_setup_aes(struct h2fmi_state *_state, int _enabled, int _encrypt)
+{
+	if(_enabled)
+	{
+		// TODO: FTL override.
+		
+		_state->aes.data_size = _state->geo.bytes_per_page;
+		_state->aes.iv_param = (void*)_state;
+		_state->aes.gen_iv = h2fmi_aes_gen_iv;
+		_state->aes.key = h2fmi_aes_key;
+		_state->aes.decrypt = !_encrypt;
+		_state->aes.type = CDMA_AES_128;
+
+		cdma_aes(_state->pdata->dma0, &_state->aes);
+	}
+	else
+		cdma_aes(_state->pdata->dma0, NULL);
+}
+
+static int h2fmi_is_block_bad(struct h2fmi_state *_state, int _ce,
+		int _block)
+{
+	int bb = _block >> 3;
+	int bi = _block & 0x7;
+
+	if(!_state->bbt[_ce])
+		return -ENOENT;
+
+	return (_state->bbt[_ce][bb] & (1 << bi))? 1: 0;
+}
+
+static int h2fmi_block_isbad(struct mtd_info *_mtd, loff_t _ofs)
+{
+	struct h2fmi_state *state = _mtd->priv;
+	int chipnr = _ofs >> state->geo.chip_shift;
+	int page = (_ofs >> state->geo.page_shift) & state->geo.pagemask;
+
+	int block = page / state->geo.pages_per_block;
+	return h2fmi_is_block_bad(state, chipnr, block);
+}
+
+static int h2fmi_block_markbad(struct mtd_info *_mtd, loff_t _ofs)
+{
+	struct h2fmi_state *state = _mtd->priv;
+	int chipnr = _ofs >> state->geo.chip_shift;
+	int page = (_ofs >> state->geo.page_shift) & state->geo.pagemask;
+
+	int block = page / state->geo.pages_per_block;
+	int bb = block >> 3;
+	int bi = block & 0x7;
+
+	if(!state->bbt[chipnr])
+		return -ENOENT;
+
+	state->bbt[chipnr][bb] |= (1 << bi);
+	return 0;
+}
+
+static int h2fmi_rw_large_page(struct h2fmi_state *_state)
+{
+	int ret;
+
+	cdma_dir_t dir = (_state->state != H2FMI_READ) ? CDMA_FROM_MEM: CDMA_TO_MEM;
+
+	ret = cdma_begin(_state->pdata->dma0, dir,
+			_state->transaction.sg_data, _state->transaction.sg_num_data,
+			_state->geo.bytes_per_page*_state->transaction.count,
+			_state->base_dma + H2FMI_DATA0, 4, 8, _state->pdata->pid0);
+	if(ret)
+		return ret;
+
+	ret = cdma_begin(_state->pdata->dma1, dir,
+			_state->transaction.sg_oob, _state->transaction.sg_num_oob,
+			_state->geo.oobavail*_state->transaction.count,
+			_state->base_dma + H2FMI_DATA1, 1, 1, _state->pdata->pid1);
+	if(ret)
+	{
+		cdma_cancel(_state->pdata->dma0);
+		return ret;
+	}
+
+	return 0;
+}
+
+static int h2fmi_read_complete(struct h2fmi_state *_state)
+{
+	h2fmi_clear_interrupt(_state);
+	h2fmi_disable_bus(_state);
+	return 0;
+}
+
+static int h2fmi_read_state_2(struct h2fmi_state *_state)
+{
+	int val = h2fmi_transfer_ready(_state);
+	if(val < 0)
+	{
+		writel(0, _state->flash_regs + H2FMI_NREQ);
+		h2fmi_disable_bus(_state);
+		_state->transaction.result = -ETIMEDOUT;
+		_state->read_state = H2FMI_READ_COMPLETE;
+		return h2fmi_read_complete(_state);
+	}
+	else if(val)
+	{
+		h2fmi_clear_interrupt(_state);
+		h2fmi_send_cmd(_state, NAND_CMD_READ0, 1);
+		writel(2, _state->base_regs + H2FMI_CREQ);
+
+		_state->read_state = H2FMI_READ_3;
+		if(_state->transaction.curr == 0)
+		{
+			writel(3, _state->base_regs + H2FMI_CCMD);
+			h2fmi_rw_large_page(_state);
+			//_fmi->last_action_time = timer_get_system_microtime();
+		}
+		else
+		{
+			writel(0x82, _state->base_regs + H2FMI_CCMD);
+			writel(0x3, _state->base_regs + H2FMI_CCMD);
+			//_fmi->last_action_time = timer_get_system_microtime();
+			h2fmi_check_ecc(_state);
+		}
+	}
+
+	return 0;
+}
+
+static int h2fmi_read_state_4(struct h2fmi_state *_state)
+{
+	if(readl(_state->base_regs + H2FMI_UNK8) & 4)
+	{
+		/*if(timer_get_system_microtime() - _fmi->last_action_time > _fmi->stage_time_interval)
+		{
+			_fmi->current_status = 0;
+			_fmi->failure_details.overall_status = 0x8000001F;
+		}
+		else*/
+			return 0;
+	}
+	else
+	{
+		if(_state->transaction.curr < _state->transaction.count)
+		{
+			h2fmi_prepare_transfer(_state);
+			//_fmi->last_action_time = timer_get_system_microtime();
+			_state->read_state = H2FMI_READ_2;
+			return h2fmi_read_state_2(_state);
+		}
+		else
+			h2fmi_check_ecc(_state);
+	}
+
+	_state->read_state = H2FMI_READ_COMPLETE;
+	return h2fmi_read_complete(_state);
+}
+
+static int h2fmi_read_state_1(struct h2fmi_state *_state)
+{
+	int reset_chip = 0;
+	if(_state->transaction.new_chip)
+	{
+		_state->transaction.new_chip = 0;
+		h2fmi_enable_chip(_state, _state->transaction.chips[_state->transaction.curr]);
+		h2fmi_set_address(_state, _state->transaction.pages[_state->transaction.curr]);
+		h2fmi_send_cmd(_state, NAND_CMD_READSTART << 8, 0xb);
+	}
+	else
+		reset_chip = (_state->transaction.curr >= _state->transaction.count)? 0: 1;
+
+	if(_state->transaction.curr + 1 < _state->transaction.count)
+	{
+		if(_state->transaction.chips[_state->transaction.curr+1]
+				== _state->transaction.chips[_state->transaction.curr])
+		{
+			_state->transaction.new_chip = 1;
+		}
+		else
+		{
+			// It's a different chip, so we can set it up now,
+			// and then next stage_1, we won't have to do it!
+			_state->transaction.new_chip = 0;
+			reset_chip = 1;
+
+			h2fmi_enable_chip(_state, _state->transaction.chips[_state->transaction.curr+1]);
+			h2fmi_set_address(_state, _state->transaction.pages[_state->transaction.curr+1]);
+			h2fmi_send_cmd(_state, NAND_CMD_READSTART << 8, 0xb);
+		}
+	}
+
+	if(reset_chip)
+		h2fmi_enable_chip(_state, _state->transaction.chips[_state->transaction.curr]);
+
+	writel(0x100000, _state->base_regs + H2FMI_CREQ);
+	_state->read_state = H2FMI_READ_4;
+	//_fmi->last_action_time = timer_get_system_microtime();
+	return h2fmi_read_state_4(_state);
+}
+
+static int h2fmi_read_state_3(struct h2fmi_state *_state)
+{
+	if((readl(_state->base_regs + H2FMI_CSTS) & 2) == 0)
+	{
+		/*if(timer_get_system_microtime() - _fmi->last_action_time > _fmi->time_interval)
+		{
+			_fmi->current_status = 0;
+			_fmi->failure_details.overall_status = ETIMEDOUT;
+			_fmi->state.read_state = H2FMI_READ_DONE;
+			return h2fmi_read_complete_handler(_fmi);
+		}*/
+	}
+	else
+	{
+		writel(0, _state->base_regs + H2FMI_CREQ);
+		_state->transaction.curr++;
+		_state->read_state = H2FMI_READ_1;
+		return h2fmi_read_state_1(_state);
+	}
+
+	return 0;
+}
+
+static int h2fmi_read_begin(struct h2fmi_state *_state)
+{
+	_state->transaction.curr = 0;
+	_state->transaction.new_chip = 1;
+	_state->transaction.busy = 1;
+
+	h2fmi_setup_transfer(_state);
+
+	_state->read_state = H2FMI_READ_1;
+	return h2fmi_read_state_1(_state);
+}
+
+static int h2fmi_read_state_machine(struct h2fmi_state *_state)
+{
+	static int (*fns[])(struct h2fmi_state*) = {
+		h2fmi_read_begin,
+		h2fmi_read_state_1,
+		h2fmi_read_state_2,
+		h2fmi_read_state_3,
+		h2fmi_read_state_4,
+		h2fmi_read_complete,
+	};
+
+	if(_state->state != H2FMI_READ)
+	{
+		dev_err(&_state->dev->dev, "read_state_machine called whilst not reading!\n");
+		return -EINVAL;
+	}
+
+	if(_state->read_state > ARRAY_SIZE(fns))
+	{
+		dev_err(&_state->dev->dev, "invalid read state %d.\n", _state->read_state);
+		return -EINVAL;
+	}
+
+	return fns[_state->read_state](_state);
+}
+
+// TODO: convert to scatterlist
+static int h2fmi_read_pages(struct h2fmi_state *_state, int _count,
+		u16 *_ces, u32 *_pages,
+		struct scatterlist *_sg_data, size_t _sg_num_data,
+		struct scatterlist *_sg_oob, size_t _sg_num_oob,
+		u8 *_eccres, u8 *_eccbuf)
+{
+	int i, j;
+
+	if(_state->state != H2FMI_IDLE)
+		return -EBUSY;
+
+	memset(&_state->transaction, 0, sizeof(_state->transaction));
+
+	_state->transaction.count = _count;
+	_state->transaction.chips = _ces;
+	_state->transaction.pages = _pages;
+
+	_state->transaction.sg_data = _sg_data;
+	_state->transaction.sg_num_data = _sg_num_data;
+
+	_state->transaction.sg_oob = _sg_oob;
+	_state->transaction.sg_num_oob = _sg_num_oob;
+
+	_state->transaction.eccres = _eccres;
+	_state->transaction.eccbuf = _eccbuf;
+
+	_state->state = H2FMI_READ;
+	_state->read_state = H2FMI_READ_BEGIN;
+
+	h2fmi_reset(_state);
+	h2fmi_clear_ecc_buf(_state);
+
+	while(_state->read_state != H2FMI_READ_COMPLETE)
+		h2fmi_read_state_machine(_state);
+
+	if(_state->transaction.busy)
+	{
+		if(cdma_wait(_state->pdata->dma0)
+				|| cdma_wait(_state->pdata->dma1))
+		{
+			dev_err(&_state->dev->dev, "failed to wait for DMA completion.\n");
+			return -ETIMEDOUT;
+		}
+
+		_state->transaction.result = 0;
+	}
+
+	cdma_cancel(_state->pdata->dma0);
+	cdma_cancel(_state->pdata->dma1);
+
+	_state->state = H2FMI_IDLE;
+	h2fmi_clear_interrupt(_state);
+
+	// metadata whitening
+	{
+		struct scatterlist *sg = _state->transaction.sg_oob;
+		int count = _state->transaction.sg_num_oob;
+		size_t sg_off = 0;
+
+		for(i = 0; i < _count; i++)
+		{
+			u8 *ptr = sg_virt(sg) + sg_off;
+			u32 *p = (u32*)ptr;
+
+			if(sg->length - sg_off < _state->mtd.oobsize)
+				panic("SG too small for metadata whitening. %d-%d.\n", sg->length, sg_off);
+
+			if(!_state->whitening_disabled)
+				for(j = 0; j < 4; j++)
+					p[i] ^= h2fmi_hash_table[(j + _pages[i])
+						% ARRAY_SIZE(h2fmi_hash_table)];
+			
+			for(j = _state->geo.oobavail; j < _state->mtd.oobsize; j++)
+				ptr[j] = 0xFF;
+
+			sg_off += _state->mtd.oobsize;
+			if(sg_off >= sg->length)
+			{
+				if(count == 0)
+				{
+					printk(KERN_ERR "h2fmi: not enough SGs for metadata!\n");
+					break;
+				}
+
+				sg = sg_next(sg);
+				sg_off = 0;
+				count--;
+			}
+		}
+	}
+
+	if(_state->transaction.result)
+		return _state->transaction.result;
+
+	if(_state->transaction.num_failed)
+		return -EIO;
+
+	if(_state->transaction.num_ecc)
+		return -EUCLEAN;
+
+	if(_state->transaction.num_empty)
+		return -ENOENT;
+
+	return 0;
+}
+
+static int h2fmi_write_prepare_ce(struct h2fmi_state *_state)
+{
+	int ret;
+
+	u16 chip = _state->transaction.chips[_state->transaction.curr];
+	if(!(_state->transaction.chip_mask & (1 << chip))) // chip is unused
+		return -EBUSY;
+
+	ret = h2fmi_prepare_transfer(_state);
+	if(ret)
+		return ret;
+
+	_state->transaction.chip_mask &=~ (1 << chip);
+	return 0;
+}
+
+static int h2fmi_write_ready(struct h2fmi_state *_state)
+{
+	int ret = h2fmi_transfer_ready(_state);
+	if(ret)
+		return ret;
+
+	if(!(readl(_state->flash_regs + H2FMI_STATUS) & 0x80))
+	{
+		dev_err(&_state->dev->dev, "failed to ready CE for write.\n");
+		return -EIO;
+	}
+
+	return 0;
+}
+
+static int h2fmi_erase_prepare(struct h2fmi_state *_state)
+{
+	int ret = h2fmi_prepare_transfer(_state);
+	if(ret)
+		return ret;
+
+	while(1) // TODO: use the interrupts for this? : <
+	{
+		ret = h2fmi_write_ready(_state);
+		if(ret == 0)
+			continue;
+
+		break;
+	}
+
+	return ret;
+}
+
+static inline int h2fmi_write_seqin(struct h2fmi_state *_state, int _page)
+{
+	h2fmi_set_address(_state, _page);
+
+	return h2fmi_send_cmd(_state, NAND_CMD_SEQIN, 0x9);
+}
+
+static inline int h2fmi_write_pageprog(struct h2fmi_state *_state)
+{
+	return h2fmi_send_cmd(_state, NAND_CMD_PAGEPROG << 8, 0);
+}
+
+static void h2fmi_do_write_page(struct h2fmi_state *_state)
+{
+	_state->transaction.chip_mask |=
+		(1 << _state->transaction.chips[_state->transaction.curr]);
+
+	h2fmi_write_seqin(_state,
+			_state->transaction.pages[_state->transaction.curr]);
+
+	writel(2, _state->base_regs + H2FMI_CREQ);
+	writel(5, _state->base_regs + H2FMI_CCMD);
+	
+	//_fmi->last_action_time = timer_get_system_microtime();
+
+	h2fmi_write_pageprog(_state);
+}
+
+static int h2fmi_write_complete(struct h2fmi_state *_state)
+{
+	h2fmi_clear_interrupt(_state);
+	h2fmi_disable_bus(_state);
+	return 0;
+}
+
+static int h2fmi_write_state_4(struct h2fmi_state *_state)
+{
+	if(!_state->transaction.chip_mask)
+	{
+		h2fmi_disable_bus(_state);
+		_state->write_state = H2FMI_WRITE_COMPLETE;
+		return 0;
+	}
+
+	h2fmi_enable_chip(_state, ffs(_state->transaction.chip_mask)-1);
+
+	/*if(write_setting == 4 || 5) ...*/
+
+	// last action = ...
+	_state->write_state = H2FMI_WRITE_5;
+	return h2fmi_prepare_transfer(_state);
+}
+
+static int h2fmi_write_state_5(struct h2fmi_state *_state)
+{
+	int rdy = h2fmi_write_ready(_state);
+
+	if(rdy <= 0)
+	{
+		if(!rdy)
+			return 0;
+
+		_state->transaction.result = rdy;
+		_state->transaction.chip_mask &=~ (1 <<
+				_state->transaction.chips[_state->transaction.curr]);
+		_state->write_state = H2FMI_WRITE_5;
+		return rdy;
+	}
+	else
+	{
+		h2fmi_clear_interrupt(_state);
+
+		if(!(readl(_state->flash_regs + H2FMI_STATUS) & 1))
+			_state->transaction.result = -EIO;
+
+		writel(0, _state->flash_regs + H2FMI_NREQ);
+
+		// TODO: some write_mode stuff.
+
+		if(_state->transaction.new_chip)
+			_state->transaction.new_chip = 0;
+		else
+		{
+			_state->transaction.chip_mask &=~
+				(1 << (ffs(_state->transaction.chip_mask)-1));
+		}
+
+		_state->transaction.curr++;
+	}
+
+	_state->write_state = H2FMI_WRITE_4;
+	return h2fmi_write_state_4(_state);
+}
+
+static int h2fmi_write_state_2(struct h2fmi_state *_state)
+{
+	int rdy = h2fmi_write_ready(_state);
+
+	if(rdy <= 0)
+	{
+		if(!rdy)
+			return 0;
+
+		_state->transaction.result = rdy;
+		_state->transaction.chip_mask &=~ (1 <<
+				_state->transaction.chips[_state->transaction.curr]);
+		_state->write_state = H2FMI_WRITE_5;
+		return rdy;
+	}
+	else
+	{
+		int val;
+
+		h2fmi_clear_interrupt(_state);
+
+		// TODO: write mode
+		
+		val = readl(_state->flash_regs + H2FMI_STATUS) & 1;
+		writel(0, _state->flash_regs + H2FMI_NREQ);
+
+		if(!val)
+		{
+			_state->write_state = H2FMI_WRITE_3;
+			h2fmi_do_write_page(_state);
+			return 0;
+		}
+
+		// TODO: store first chip with fail.
+		_state->transaction.result = -EIO;
+		_state->write_state = H2FMI_WRITE_4;
+		return h2fmi_write_state_4(_state);
+	}
+}
+
+static int h2fmi_write_state_3(struct h2fmi_state *_state)
+{
+	if(readl(_state->base_regs + H2FMI_CSTS) & 2)
+	{
+		h2fmi_clear_interrupt(_state);
+		h2fmi_wait_req(_state, 2);
+
+		_state->transaction.curr++;
+		if(_state->transaction.curr >= _state->transaction.count)
+		{
+			_state->write_state = H2FMI_WRITE_4;
+			return h2fmi_write_state_4(_state);
+		}
+		else
+		{
+			if(h2fmi_write_prepare_ce(_state) < 0)
+				h2fmi_do_write_page(_state);
+			else
+			{
+				_state->write_state = H2FMI_WRITE_2;
+				// update last active time
+				return 0;
+			}
+		}
+	}
+	else
+	{
+		/*uint64_t current_time = timer_get_system_microtime();
+		if ((current_time - _fmi->last_action_time) > _fmi->time_interval) // _fmi->time_interval rename to _fmi->time_interval
+		{
+			_fmi->current_status = setting;
+			_fmi->state.write_state = H2FMI_WRITE_4;
+			return h2fmi_write_state_4_handler(_fmi);
+		}*/
+	}
+
+	return 0;
+}
+
+static int h2fmi_write_state_1(struct h2fmi_state *_state)
+{
+	if(!h2fmi_write_prepare_ce(_state))
+	{
+		//_fmi->last_action_time = timer_get_system_microtime();
+		_state->write_state = H2FMI_WRITE_2;
+		return 0;
+	}
+	else
+	{
+		h2fmi_do_write_page(_state);
+		_state->write_state = H2FMI_WRITE_3;
+		return h2fmi_write_state_3(_state);
+	}
+}
+
+static int h2fmi_write_begin(struct h2fmi_state *_state)
+{
+	_state->transaction.curr = 0;
+	_state->transaction.busy = 1;
+	_state->transaction.new_chip = 1;
+
+	h2fmi_setup_transfer(_state);
+	h2fmi_rw_large_page(_state);
+
+	_state->write_state = H2FMI_READ_1;
+	return h2fmi_write_state_1(_state);
+}
+
+static int h2fmi_write_state_machine(struct h2fmi_state *_state)
+{
+	static int (*fns[])(struct h2fmi_state*) = {
+		h2fmi_write_begin,
+		h2fmi_write_state_1,
+		h2fmi_write_state_2,
+		h2fmi_write_state_3,
+		h2fmi_write_state_4,
+		h2fmi_write_state_5,
+		h2fmi_write_complete,
+	};
+
+	if(_state->state != H2FMI_READ)
+	{
+		dev_err(&_state->dev->dev, "write_state_machine called whilst not writeing!\n");
+		return -EINVAL;
+	}
+
+	if(_state->write_state > ARRAY_SIZE(fns))
+	{
+		dev_err(&_state->dev->dev, "invalid write state %d.\n", _state->write_state);
+		return -EINVAL;
+	}
+
+	return fns[_state->write_state](_state);
+}
+
+// TODO: convert to scatterlist
+static int h2fmi_write_pages(struct h2fmi_state *_state, int _count,
+		u16 *_chips, u32 *_pages,
+		struct scatterlist *_sg_data, size_t _sg_num_data,
+		struct scatterlist *_sg_oob, size_t _sg_num_oob,
+		enum h2fmi_write_mode _mode)
+{
+	if(_state->state != H2FMI_IDLE)
+		return -EBUSY;
+
+	memset(&_state->transaction, 0, sizeof(_state->transaction));
+
+	_state->transaction.count = _count;
+	_state->transaction.chips = _chips;
+	_state->transaction.pages = _pages;
+
+	_state->transaction.sg_data = _sg_data;
+	_state->transaction.sg_num_data = _sg_num_data;
+
+	_state->transaction.sg_oob = _sg_oob;
+	_state->transaction.sg_num_oob = _sg_num_oob;
+
+	_state->transaction.write_mode = _mode;
+
+	_state->state = H2FMI_WRITE;
+	_state->write_state = H2FMI_WRITE_BEGIN;
+
+	// TODO: data whitening?
+
+	h2fmi_reset(_state);
+	h2fmi_set_timing_mode(_state, 1);
+
+	while(_state->write_state != H2FMI_WRITE_COMPLETE)
+		h2fmi_write_state_machine(_state);
+
+	if(_state->transaction.busy)
+	{
+		if(cdma_wait(_state->pdata->dma0)
+				|| cdma_wait(_state->pdata->dma1))
+		{
+			dev_err(&_state->dev->dev, "failed to wait for DMA completion.\n");
+			return -ETIMEDOUT;
+		}
+
+		_state->transaction.result = 0;
+	}
+
+	cdma_cancel(_state->pdata->dma0);
+	cdma_cancel(_state->pdata->dma1);
+
+	h2fmi_reset_timing(_state);
+
+	_state->state = H2FMI_IDLE;
+	h2fmi_clear_interrupt(_state);
+	
+	if(_state->transaction.result)
+		return _state->transaction.result;
+
+	if(_state->transaction.num_failed)
+		return -EIO;
+
+	return 0;
+}
+
+static int h2fmi_erase_blocks(struct h2fmi_state *_state,
+		int _num, u16 *_ces, u32 *_pages)
+{
+	int i;
+	int eraseOK = 1;
+
+	if(_state->state != H2FMI_IDLE)
+		return -EBUSY;
+
+	memset(&_state->transaction, 0, sizeof(_state->transaction));
+
+	_state->transaction.count = _num;
+	_state->transaction.chips = _ces;
+	_state->transaction.pages = _pages;
+
+	_state->state = H2FMI_ERASE;
+
+	h2fmi_reset(_state);
+	h2fmi_set_timing_mode(_state, 1);
+
+	while(_state->transaction.curr < _state->transaction.count)
+	{
+		int chip = _state->transaction.chips[_state->transaction.curr];
+		int ret;
+
+		if(_state->transaction.chip_mask & (1 << chip))
+		{
+			h2fmi_enable_chip(_state, chip);
+			_state->transaction.curr++;
+
+			ret = h2fmi_erase_prepare(_state);
+
+			if(ret < 0)
+			{
+				dev_err(&_state->dev->dev, 
+						"failed to erase block at %d, err %d.\n",
+						_state->transaction.pages[_state->transaction.curr],
+						ret);
+
+				// TODO: store which chip failed?
+				
+				eraseOK = 0;
+				break;
+			}
+			else
+				_state->transaction.chip_mask &=~ (1 << chip);
+		}
+		else
+		{
+			int i;
+			for(i = _state->transaction.curr;
+					i < _state->transaction.count; i++)
+			{
+				int page;
+				int chip = _state->transaction.chips[i];
+				if(_state->transaction.chip_mask & (1 << chip))
+					break;
+
+				page = _state->transaction.pages[i];
+
+				h2fmi_enable_chip(_state, chip);
+				h2fmi_set_block_address(_state, page);
+				h2fmi_send_cmd(_state, 
+						NAND_CMD_ERASE1
+						| (NAND_CMD_ERASE2 << 8), 0xb);
+
+				_state->transaction.chip_mask |= (1 << chip);
+			}
+		}
+	}
+
+	// flush all of the chips used.
+	for(i = 0; i < _state->transaction.count; i++)
+	{
+		int chip = _state->transaction.chips[i];
+		int ret;
+
+		if(!(_state->transaction.chip_mask & (1 << chip)))
+			continue;
+
+		h2fmi_enable_chip(_state, chip);
+
+		ret = h2fmi_erase_prepare(_state);
+
+		if(ret < 0)
+		{
+			dev_err(&_state->dev->dev, 
+					"failed to erase block at %d, err %d.\n",
+					_state->transaction.pages[_state->transaction.curr],
+					ret);
+
+			// TODO: store which chip failed?
+
+			eraseOK = 0;
+		}
+		else
+			_state->transaction.chip_mask &=~ (1 << chip);
+	}
+
+	h2fmi_reset_timing(_state);
+	h2fmi_disable_bus(_state);
+
+	_state->state = H2FMI_IDLE;
+
+	if(!eraseOK)
+		return -EIO;
+
+	return 0;
+}
+
+static int h2fmi_read_single_page(struct h2fmi_state *_state, int _ce, int _page,
+		u8 *_buffer, int _raw)
+{
+	struct scatterlist sg_buf, sg_oob;
+	u8 *oobbuf = kmalloc(_state->geo.oobavail, GFP_KERNEL);
+	u16 chip = _state->chip_map[_ce];
+	u32 page = _page;
+	int ret;
+
+	sg_init_one(&sg_buf, _buffer, _state->geo.bytes_per_page);
+	sg_init_one(&sg_oob, oobbuf, _state->geo.oobavail);
+
+	h2fmi_setup_aes(_state, !_raw, 0);
+	ret = h2fmi_read_pages(_state, 1, &chip, &page, &sg_buf, 1, &sg_oob, 1, NULL, NULL);
+
+	kfree(oobbuf);
+	return ret;
+}
+
+static int h2fmi_mtd_read(struct mtd_info *_mtd, loff_t _from, size_t _len,
+		     size_t *_retlen, uint8_t *_buf)
+{
+	struct h2fmi_state *state = _mtd->priv;
+
+	int chipnr = _from >> state->geo.chip_shift;
+	int fst = (_from >> state->geo.page_shift) & state->geo.pagemask;
+	int off = _from & (state->geo.bytes_per_page-1);
+	int cnt = DIV_ROUND_UP(_len + off, state->geo.bytes_per_page);
+	int i, page, ret;
+
+	struct scatterlist sg_data, sg_oob;
+
+	u16 *chips = kmalloc(sizeof(u16)*cnt, GFP_KERNEL);
+	u32 *pages = kmalloc(sizeof(u32)*cnt, GFP_KERNEL);
+	u8 *oobbuf = kmalloc(_mtd->oobsize*cnt, GFP_KERNEL);
+	u8 *buf;
+
+	for(i = 0, page = fst; i < cnt; i++, page++)
+	{
+		if(i && (!(page & state->geo.pagemask)))
+		{
+			// We passed over a chip boundary
+			page = 0;
+			chipnr++;
+		}
+
+		chips[i] = state->chip_map[chipnr];
+		pages[i] = page;
+	}
+
+	if(!off)
+		buf = _buf;
+	else
+		buf = kmalloc(cnt*_mtd->writesize, GFP_KERNEL);
+
+	h2fmi_setup_aes(state, 1, 0);
+
+	sg_init_one(&sg_data, buf, state->geo.bytes_per_page);
+	sg_init_one(&sg_oob, oobbuf, state->geo.oobavail);
+	ret = h2fmi_read_pages(state, cnt, chips, pages, &sg_data, 1, &sg_oob, 1, NULL, NULL);
+
+	if(off)
+	{
+		memcpy(_buf, buf+off, _len);
+		kfree(buf);
+	}
+
+	*_retlen = _len;
+	
+	kfree(chips);
+	kfree(pages);
+	kfree(oobbuf);
+	return ret;
+}
+
+
+static int h2fmi_mtd_write(struct mtd_info *_mtd, loff_t _to, size_t _len,
+		     size_t *_retlen, const uint8_t *_buf)
+{
+	struct h2fmi_state *state = _mtd->priv;
+
+	int chipnr = _to >> state->geo.chip_shift;
+	int fst = (_to >> state->geo.page_shift) & state->geo.pagemask;
+	int off = _to & (state->geo.bytes_per_page-1);
+	int cnt = DIV_ROUND_UP(_len + off, state->geo.bytes_per_page);
+	int i, page, ret;
+	struct scatterlist sg_data, sg_oob;
+
+	u16 *chips;
+	u32 *pages;
+	u8 *oobbuf;
+
+	if(off || _len != cnt*_mtd->writesize)
+		return -EINVAL;
+
+	chips = kmalloc(sizeof(u16)*cnt, GFP_KERNEL);
+	pages = kmalloc(sizeof(u32)*cnt, GFP_KERNEL);
+	oobbuf = kmalloc(_mtd->oobsize*cnt, GFP_KERNEL);
+
+	for(i = 0, page = fst; i < cnt; i++, page++)
+	{
+		// TODO: skip over bad blocks.
+
+		u8 *oob = oobbuf + (_mtd->oobsize*i);
+		int j;
+
+		// This is kind of a hack, but it works for now.
+		// We default the meta-data to say that it's not part
+		// of Apple's FTL.
+		for(j = 0; j < _mtd->oobsize-2; j++)
+			oob[j] = 0xFF;
+		oob[_mtd->oobsize-2] = 0x0;
+		oob[_mtd->oobsize-1] = 0x80;
+
+		if(i && (!(page & state->geo.pagemask)))
+		{
+			// We passed over a chip boundary
+			page = 0;
+			chipnr++;
+		}
+
+		chips[i] = state->chip_map[chipnr];
+		pages[i] = page;
+	}
+
+	h2fmi_setup_aes(state, 1, 0);
+	sg_init_one(&sg_data, _buf, state->geo.bytes_per_page);
+	sg_init_one(&sg_oob, oobbuf, state->geo.oobavail);
+	ret = h2fmi_write_pages(state, cnt, chips, pages, &sg_data, 1, &sg_oob, 1, H2FMI_WRITE_NORMAL);
+
+	*_retlen = _len;
+	
+	kfree(chips);
+	kfree(pages);
+	kfree(oobbuf);
+	return ret;
+}
+
+static int h2fmi_mtd_erase(struct mtd_info *_mtd, struct erase_info *_erase)
+{
+	struct h2fmi_state *state = _mtd->priv;
+
+	uint64_t addr = _erase->addr;
+	int chipnr = addr >> state->geo.chip_shift;
+	int page = (addr >> state->geo.page_shift) & state->geo.pagemask;
+	int off = addr & (state->geo.bytes_per_page-1);
+	int poff = page & (state->geo.pages_per_block-1);
+	int block = page / state->geo.pages_per_block;
+	int count = _erase->len, numDone=0;
+	int i, ret;
+	u16 *chips;
+	u32 *pages;
+
+	if(off || poff)
+	{
+		dev_err(&state->dev->dev,
+				"erase command not block-aligned: %llu",
+				addr);
+		return -EINVAL;
+	}
+
+	chips = kmalloc(sizeof(u16)*count, GFP_KERNEL);
+	pages = kmalloc(sizeof(u32)*count, GFP_KERNEL);
+	if(!chips || !pages)
+		return -ENOMEM;
+
+	for(i = 0; i < _erase->len; i++)
+	{
+		// Just skip over bad blocks.
+		if(h2fmi_is_block_bad(state, chipnr, block) == 0)
+		{
+			chips[numDone] = chipnr;
+			pages[numDone] = page;
+			numDone++;
+		}
+
+		page += state->geo.pages_per_block;
+		block++;
+		if(page > state->geo.pages_per_ce)
+		{
+			page = 0;
+			block = 0;
+			chipnr++;
+		}
+	}
+
+	if(numDone > 0)
+		ret = h2fmi_erase_blocks(state, numDone, chips, pages);
+
+	kfree(chips);
+	kfree(pages);
+	return 0;
+}
+
+static int h2fmi_read_special_page(struct h2fmi_state *_state, int _ce, char _page[16], uint8_t *_buffer, size_t _sz)
+{
+	u8 *buf = kzalloc(_state->geo.bytes_per_page, GFP_KERNEL);
+	int lowestBlock = _state->geo.blocks_per_ce - (_state->geo.blocks_per_ce/10);
+	int block;
+	int ret;
+
+	for(block = _state->geo.blocks_per_ce-1; block >= lowestBlock; block--)
+	{
+		int page;
+		int badCount = 0;
+
+		int realBlock = (block/_state->geo.blocks_per_bank) * _state->geo.bank_address_space
+			+ (block % _state->geo.blocks_per_bank);
+
+		for(page = 0; page < _state->geo.pages_per_block; page++)
+		{
+			if(badCount > 2)
+				break;
+
+			ret = h2fmi_read_single_page(_state, _ce,
+					(realBlock * _state->geo.pages_per_block) + page, buf, 0);
+			if(ret < 0)
+			{
+				if(ret != -ENOENT)
+					badCount++;
+
+				continue;
+			}
+
+			//print_hex_dump(KERN_INFO, "h2fmi special-page: ", DUMP_PREFIX_OFFSET, 32,
+			//		1, buf, _state->geo.bytes_per_page, true);
+
+			if(memcmp(buf, _page, sizeof(_page)) == 0)
+			{
+				if(_buffer)
+				{
+					size_t size = min(((size_t)((size_t*)buf)[13]), _sz);
+					memcpy(_buffer, buf + 0x38, size);
+				}
+
+				kfree(buf);
+				return 0;
+			}
+		}
+	}
+
+	dev_err(&_state->dev->dev, "failed to find special page %s.\n", _page);
+	kfree(buf);
+	return -ENOENT;
+}
+
+static int h2fmi_scan_bbt(struct h2fmi_state *_state)
+{
+	size_t sz = DIV_ROUND_UP(_state->geo.blocks_per_ce, 8);
+	int i, ret;
+
+	for(i = 0; i < _state->num_chips; i++)
+	{
+		_state->bbt[i] = kzalloc(sz, GFP_KERNEL);
+		ret = h2fmi_read_special_page(_state, i,
+				"DEVICEINFOBBT\0\0\0", _state->bbt[i], sz);
+		if(ret)
+			return ret;
+	}
+
+	return 0;
+}
+
+static int h2fmi_detect_nand(struct h2fmi_state *_state)
+{
+	char goodbuf[8];
+	int ret;
+	int i;
+	int count = 0;
+	int have_good = 0;
+	struct clk *clk;
+	struct h2fmi_timing_setup timing_setup;
+	struct mtd_info *mtd = &_state->mtd;
+	u8 timing_info[5];
+
+	_state->num_chips = 0;
+	_state->bitmap = 0;
+
+	ret = h2fmi_reset_all(_state);
+	if(ret)
+		return ret;
+
+	for(i = 0; i < H2FMI_MAX_CHIPS; i++)
+	{
+		char buf[8];
+
+		h2fmi_enable_chip(_state, i);
+
+		ret = h2fmi_readid(_state, 0);
+		if(ret)
+		{
+			h2fmi_disable_chip(_state, i);
+			return ret;
+		}
+
+		h2fmi_read(_state, buf, sizeof(buf));
+		if(!memcmp(buf, "\0\0\0\0\0\0\0\0", 6) // 6 is not an error
+				|| !memcmp(buf, "\xff\xff\xff\xff\xff\xff\xff\xff", 6))
+		{
+			h2fmi_disable_chip(_state, i);
+			h2fmi_reset(_state);
+			continue;
+		}
+
+		if(!have_good || memcmp(goodbuf, buf, sizeof(goodbuf)) == 0)
+		{
+			// We found another identical chip.
+			int id = count++;
+
+			_state->num_chips++;
+			_state->bitmap |= (1 << i);
+			_state->chip_map[id] = i;
+			
+			dev_info(&_state->dev->dev, "found chip on ce%d: %02x %02x %02x %02x %02x %02x %02x %02x.\n",
+					i, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+
+			if(!have_good)
+			{
+				have_good = 1;
+				memcpy(goodbuf, buf, sizeof(goodbuf));
+			}
+		}
+		else
+		{
+			// Weird chip.
+			dev_warn(&_state->dev->dev, "weird chip on ce%d: %02x %02x %02x %02x %02x %02x %02x %02x.\n",
+					i, buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+		}
+
+		h2fmi_disable_chip(_state, i);
+		h2fmi_reset(_state);
+	}
+
+	ret = _state->pdata->complete_board_id(_state->dev->id, goodbuf, _state->bitmap, &_state->board_id);
+	if(ret)
+		return ret;
+
+	dev_info(&_state->dev->dev, "board id: %d, %d, %x, %d, %x, %d\n",
+			_state->board_id.num_busses,
+			_state->board_id.num_symmetric,
+			_state->board_id.chipID.chipID,
+			_state->board_id.chip1_count,
+			_state->board_id.chipID2.chipID,
+			_state->board_id.chip2_count);
+
+	_state->chip_info = _state->pdata->find_chip(goodbuf);
+	_state->board_info = _state->pdata->find_board(&_state->board_id);
+	_state->timing_info = _state->pdata->find_timing(&_state->board_id);
+	if(!_state->chip_info || !_state->board_info || ! _state->timing_info)
+	{
+		dev_err(&_state->dev->dev, "failed to find device info, bailing.\n");
+		return -EINVAL;
+	}
+
+	// geometry
+	_state->ecc_step_shift = _state->pdata->ecc_step_shift;
+	_state->geo.num_bus = _state->board_id.num_busses;
+	_state->geo.num_ce = _state->board_id.chip1_count;
+	_state->geo.bytes_per_page = _state->chip_info->bytes_per_page;
+	_state->geo.pages_per_block = _state->chip_info->pages_per_block;
+	_state->geo.blocks_per_ce = _state->chip_info->blocks_per_ce;
+	_state->geo.pages_per_ce = _state->geo.pages_per_block * _state->geo.blocks_per_ce;
+	_state->geo.ecc_steps = _state->chip_info->bytes_per_page >> _state->ecc_step_shift;
+	_state->geo.bytes_per_spare = _state->chip_info->bytes_per_spare;
+	_state->geo.banks_per_ce = _state->chip_info->banks_per_ce;
+	_state->geo.blocks_per_bank = _state->geo.blocks_per_ce / _state->geo.banks_per_ce;
+	_state->geo.vendor_type = _state->board_info->vendor_type;
+	_state->geo.oobsize = _state->geo.bytes_per_spare;
+	_state->geo.oobfree = 0xC;
+	_state->geo.oobavail = 0xA;
+
+	_state->geo.chip_size = _state->geo.bytes_per_page
+		* _state->geo.pages_per_block
+		* _state->geo.total_block_space;
+	
+	_state->geo.chip_shift = ffs(_state->geo.chip_size) - 1;
+	_state->geo.page_shift = ffs(_state->geo.bytes_per_page) - 1;
+	_state->geo.pagemask = _state->geo.chip_shift-1;
+	_state->geo.pageoffmask = _state->geo.page_shift-1;
+	
+	mtd->size = _state->geo.chip_size * _state->geo.num_ce;
+	mtd->writesize = _state->geo.bytes_per_page;
+	mtd->erasesize = mtd->writesize*_state->geo.pages_per_block;
+	mtd->oobsize = _state->geo.oobfree;
+	mtd->writebufsize = mtd->writesize;
+
+	// Check for power-of-two
+	if(!(_state->geo.blocks_per_ce & (_state->geo.blocks_per_ce-1)))
+	{
+		_state->geo.bank_address_space = _state->geo.blocks_per_ce;
+		_state->geo.total_block_space = _state->geo.blocks_per_ce;
+	}
+	else
+	{
+		u32 bas = roundup_pow_of_two(_state->geo.blocks_per_ce);
+		_state->geo.bank_address_space = bas;
+		_state->geo.total_block_space = ((_state->geo.banks_per_ce-1)*bas)
+			+ _state->geo.blocks_per_bank;
+	}
+	
+	_state->ecc_bits = h2fmi_calculate_ecc_bits(_state);
+
+	if(_state->ecc_bits > 8)
+	{
+		_state->ecc_tag = (_state->ecc_bits*8)/10;
+	}
+	else
+		_state->ecc_tag = 8;
+
+	_state->ecc_fmt = ((_state->ecc_bits & 0x1F) << 3) | 5;
+	_state->page_fmt = _state->geo.ecc_steps | 0x40000
+		| (_state->geo.oobavail << 25)
+		| (_state->geo.oobavail << 19);
+
+	dev_info(&_state->dev->dev, "ecc-fmt=0x%08x, page-fmt=0x%08x.\n",
+			_state->ecc_fmt, _state->page_fmt);
+
+	// timing
+	memset(&timing_setup, 0, sizeof(timing_setup));
+	
+	clk = clk_get(&_state->dev->dev, "lperf1");
+	if(IS_ERR(clk))
+		return PTR_ERR(clk);
+
+	timing_setup.freq = clk_get_rate(clk);
+
+	clk_put(clk);
+
+	timing_setup.f = _state->pdata->smth->some_array[3];
+	timing_setup.g = _state->pdata->smth->some_array[4];
+	timing_setup.h = _state->pdata->smth->some_array[5];
+	timing_setup.i = _state->pdata->smth->some_array[6];
+	timing_setup.j = _state->timing_info->unk4;
+	timing_setup.k = _state->timing_info->unk5;
+	timing_setup.l = _state->timing_info->unk6;
+	timing_setup.m = _state->timing_info->unk7;
+	timing_setup.n = _state->timing_info->unk8;
+
+	timing_setup.o = 0;
+
+	timing_setup.p = _state->timing_info->unk1;
+	timing_setup.q = _state->timing_info->unk2;
+	timing_setup.r = _state->timing_info->unk3;
+
+	ret = h2fmi_setup_timing(&timing_setup, timing_info);
+	if(ret)
+		return ret;
+
+	_state->timing = (timing_info[4] & 0xF)
+					| ((timing_info[3] & 0xF) << 4)
+					| ((timing_info[1] & 0xF) << 8)
+					| ((timing_info[0] & 0xF) << 12)
+					| ((timing_info[2] & 0xF) << 16);
+	writel(_state->timing, _state->flash_regs + H2FMI_TIMING);
+	dev_info(&_state->dev->dev, "timing 0x%08x.\n", _state->timing);
+
+	mtd->type = MTD_NANDFLASH;
+	mtd->flags = MTD_CAP_NANDFLASH;
+	mtd->ecclayout = &h2fmi_ecc_layout;
+
+	ret = h2fmi_scan_bbt(_state);
+	if(ret)
+		return ret;
+
+	return add_mtd_device(&_state->mtd);
+}
+
+static void h2fmi_detect_work(struct work_struct *_ws)
+{
+	struct h2fmi_state *state =
+		container_of(_ws, struct h2fmi_state, detect_work);
+	int ret = h2fmi_detect_nand(state);
+	if(ret)
+		dev_info(&state->dev->dev, "detect_nand returned %d.\n", ret);
+}
+
+int h2fmi_probe(struct platform_device *_dev)
+{
+	int ret = 0;
+	struct h2fmi_state *state;
+	struct resource *res;
+
+	state = kzalloc(sizeof(*state), GFP_KERNEL);
+	if(!state)
+	{
+		dev_err(&_dev->dev, "failed to allocate state.\n");
+		return ENOMEM;
+	}
+
+	state->dev = _dev;
+	state->pdata = _dev->dev.platform_data;
+	state->mtd.priv = state;
+	state->mtd.owner = THIS_MODULE;
+
+	INIT_WORK(&state->detect_work, &h2fmi_detect_work);
+
+	// Setup our H2FMI specific functions
+	{
+		struct mtd_info *mtd = &state->mtd;
+		mtd->read = h2fmi_mtd_read;
+		mtd->write = h2fmi_mtd_write;
+		mtd->erase = h2fmi_mtd_erase;
+
+		// TODO: writev
+
+		mtd->block_isbad = &h2fmi_block_isbad;
+		mtd->block_markbad = &h2fmi_block_markbad;
+	}
+
+	state->clk = clk_get(&_dev->dev, "fmi");
+	if(IS_ERR(state->clk))
+	{
+		dev_err(&_dev->dev, "failed to get main clock.\n");
+		goto err_state;
+	}
+
+	state->clk_bch = clk_get(&_dev->dev, "fmi-bch");
+	if(IS_ERR(state->clk_bch))
+	{
+		dev_err(&_dev->dev, "failed to get BCH clock.\n");
+		goto err_clk;
+	}
+
+	res = platform_get_resource(_dev, IORESOURCE_MEM, 0);
+	if(!res)
+	{
+		dev_err(&_dev->dev, "failed to find base IO memory.\n");
+		goto err_clk_bch;
+	}
+
+	state->base_dma = res->start;
+	state->base_regs = ioremap(res->start, resource_size(res));
+	if(!state->base_regs)
+	{
+		dev_err(&_dev->dev, "failed to map base IO memory.\n");
+		goto err_clk_bch;
+	}
+
+	res = platform_get_resource(_dev, IORESOURCE_MEM, 1);
+	if(!res)
+	{
+		dev_err(&_dev->dev, "failed to find flash IO memory.\n");
+		goto err_base_regs;
+	}
+
+	state->flash_dma = res->start;
+	state->flash_regs = ioremap(res->start, resource_size(res));
+	if(!state->flash_regs)
+	{
+		dev_err(&_dev->dev, "failed to map flash IO memory.\n");
+		goto err_base_regs;
+	}
+
+	res = platform_get_resource(_dev, IORESOURCE_MEM, 2);
+	if(!res)
+	{
+		dev_err(&_dev->dev, "failed to find bch IO memory.\n");
+		goto err_flash_regs;
+	}
+
+	state->ecc_dma = res->start;
+	state->ecc_regs = ioremap(res->start, resource_size(res));
+	if(!state->ecc_regs)
+	{
+		dev_err(&_dev->dev, "failed to map bch IO memory.\n");
+		goto err_flash_regs;
+	}
+
+	res = platform_get_resource(_dev, IORESOURCE_IRQ, 0);
+	if(!res)
+	{
+		dev_err(&_dev->dev, "failed to find IRQ.\n");
+		goto err_ecc_regs;
+	}
+
+	state->irq = res->start;
+	/*if(request_irq(state->irq, h2fmi_irq_handler,
+				IRQF_SHARED, "h2fmi", state) < 0)
+	{
+		dev_err(&_dev->dev, "failed to request IRQ.\n");
+		goto err_ecc_regs;
+	}*/
+	
+	clk_enable(state->clk);
+	clk_enable(state->clk_bch);
+
+	h2fmi_init(state);
+	platform_set_drvdata(_dev, state);
+	schedule_work(&state->detect_work);
+	goto done;
+
+err_ecc_regs:
+	iounmap(state->ecc_regs);
+
+err_flash_regs:
+	iounmap(state->flash_regs);
+
+err_base_regs:
+	iounmap(state->base_regs);
+
+err_clk_bch:
+	clk_put(state->clk_bch);
+
+err_clk:
+	clk_put(state->clk);
+
+err_state:
+	kfree(state);
+
+done:
+	return ret;
+}
+
+int h2fmi_remove(struct platform_device *_dev)
+{
+	struct h2fmi_state *state = platform_get_drvdata(_dev);
+
+	free_irq(state->irq, state);
+
+	clk_disable(state->clk_bch);
+	clk_put(state->clk_bch);
+
+	clk_disable(state->clk);
+	clk_put(state->clk);
+
+	kfree(state);
+	return 0;
+}
+
+void h2fmi_shutdown(struct platform_device *_dev)
+{
+}
+
+#ifdef CONFIG_PM
+int h2fmi_suspend(struct platform_device *_dev, pm_message_t _state)
+{
+	return 0;
+}
+
+int h2fmi_resume(struct platform_device *_dev)
+{
+	return 0;
+}
+#else
+#define h2fmi_suspend	NULL
+#define h2fmi_resume	NULL
+#endif
+
+static struct platform_driver h2fmi_driver = {
+	.driver = {
+		.name = "apple-h2fmi",
+	},
+
+	.probe = h2fmi_probe,
+	.remove = h2fmi_remove,
+	.shutdown = h2fmi_shutdown,
+	.suspend = h2fmi_suspend,
+	.resume = h2fmi_resume,
+};
+
+int __init h2fmi_mod_init(void)
+{
+	int i;
+	uint32_t val = 0x50F4546A;
+
+	for(i = 0; i < ARRAY_SIZE(h2fmi_hash_table); i++)
+	{
+		int j;
+		val = (0x19660D * val) + 0x3C6EF35F;
+
+		for(j = 1; j < 763; j++)
+		{
+			val = (0x19660D * val) + 0x3C6EF35F;
+		}
+
+		h2fmi_hash_table[i] = val;
+	}
+
+	return platform_driver_register(&h2fmi_driver);
+}
+module_init(h2fmi_mod_init);
+
+void __exit h2fmi_mod_exit(void)
+{
+	platform_driver_unregister(&h2fmi_driver);
+}
+module_exit(h2fmi_mod_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Richard Ian Taylor");
+MODULE_DESCRIPTION("Apple H2FMI NAND Driver");

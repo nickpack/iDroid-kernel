@@ -29,6 +29,11 @@ obj-$(CONFIG_FB_DEFERRED_IO)   += fb_defio.o
 obj-$(CONFIG_FB_WMT_GE_ROPS)   += wmt_ge_rops.o
 
 # Hardware specific drivers go first
+obj-$(CONFIG_S5L_DISPLAY_PIPE)	+= s5l_display_pipe.o
+obj-$(CONFIG_FB_S5L_CLCD)		+= s5l_clcd.o
+obj-$(CONFIG_FB_S5L_RGBOUT)		+= s5l_rgbout.o
+obj-$(CONFIG_FB_APPLE_IPHONE)     += iphone-fb.o
+obj-$(CONFIG_FB_S5L8920)	     += s5l8920-clcd.o
 obj-$(CONFIG_FB_AMIGA)            += amifb.o c2p_planar.o
 obj-$(CONFIG_FB_ARC)              += arcfb.o
 obj-$(CONFIG_FB_CLPS711X)         += clps711xfb.o
@@ -119,6 +124,8 @@ obj-$(CONFIG_FB_SH7760)		  += sh7760fb.o
 obj-$(CONFIG_FB_IMX)              += imxfb.o
 obj-$(CONFIG_FB_S3C)		  += s3c-fb.o
 obj-$(CONFIG_FB_S3C2410)	  += s3c2410fb.o
+obj-$(CONFIG_S5P_MIPI_DSI)	  += s5p_mipi_dsi.o s5p_mipi_dsi_common.o \
+					s5p_mipi_dsi_lowlevel.o
 obj-$(CONFIG_FB_FSL_DIU)	  += fsl-diu-fb.o
 obj-$(CONFIG_FB_COBALT)           += cobalt_lcdfb.o
 obj-$(CONFIG_FB_PNX4008_DUM)	  += pnx4008/

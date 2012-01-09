@@ -237,6 +237,13 @@ config MXS_DMA
 	  Support the MXS DMA engine. This engine including APBH-DMA
 	  and APBX-DMA is integrated into Freescale i.MX23/28 chips.
 
+config S5L_CDMA
+	bool "Apple CDMA support"
+	depends on ARCH_S5L
+	select DMA_ENGINE
+	help
+		Support Apple's CDMA controller.
+
 config DMA_ENGINE
 	bool
 

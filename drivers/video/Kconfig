@@ -2074,6 +2074,13 @@ config FB_S3C2410_DEBUG
 	  Turn on debugging messages. Note that you can set/unset at run time
 	  through sysfs
 
+config S5P_MIPI_DSI
+	tristate "Samsung SoC MIPI-DSI support."
+	depends on (ARCH_S5PV210 || ARCH_EXYNOS4 || ARCH_S5L)
+	default n
+	---help---
+	  This enables support for MIPI-DSI device.
+
 config FB_NUC900
         bool "NUC900 LCD framebuffer support"
         depends on FB && ARCH_W90X900
@@ -2384,6 +2391,33 @@ config FB_PUV3_UNIGFX
 	help
 	  Choose this option if you want to use the Unigfx device as a
 	  framebuffer device. Without the support of PCI & AGP.
+
+config FB_APPLE_IPHONE
+	tristate "iPhone framebuffer support"
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	select FB_SYS_FOPS
+
+config S5L_DISPLAY_PIPE
+	tristate "S5L8930 display pipe support"
+	depends on ARCH_S5L
+
+config FB_S5L_CLCD
+	tristate "S5L8930 Colour LCD support"
+	depends on S5L_DISPLAY_PIPE && S5P_MIPI_DSI
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	select FB_SYS_FOPS
+
+config FB_S5L_RGBOUT
+	tristate "S5L8930 RGB-out support"
+	depends on S5L_DISPLAY_PIPE
+	select FB_CFB_FILLRECT
+	select FB_CFB_COPYAREA
+	select FB_CFB_IMAGEBLIT
+	select FB_SYS_FOPS
 
 source "drivers/video/omap/Kconfig"
 source "drivers/video/omap2/Kconfig"
