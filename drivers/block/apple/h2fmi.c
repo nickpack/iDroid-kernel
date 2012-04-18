@@ -18,6 +18,7 @@
 #include <linux/err.h>
 #include <linux/log2.h>
 #include <linux/kernel.h>
+#include <linux/spinlock.h>
 #include <linux/apple_flash.h>
 
 #include <plat/h2fmi.h>
@@ -192,6 +193,8 @@ struct h2fmi_state
 	enum h2fmi_read_state read_state;
 	enum h2fmi_write_state write_state;
 	struct h2fmi_transaction transaction;
+
+	spinlock_t lock;
 
 	void *__iomem base_regs;
 	void *__iomem flash_regs;
@@ -693,19 +696,23 @@ static u32 h2fmi_aes_key[] = {
 	0xA579CCD3,
 };
 
+static int h2fmi_default_aes(struct h2fmi_state *_state, struct cdma_aes *_aes, int _decrypt)
+{
+	_aes->data_size = _state->geo.bytes_per_page;
+	_aes->iv_param = (void*)_state;
+	_aes->gen_iv = h2fmi_aes_gen_iv;
+	_aes->key = h2fmi_aes_key;
+	_aes->decrypt = _decrypt;
+	_aes->type = CDMA_AES_128;
+	return 0;
+}
+
 static void h2fmi_setup_aes(struct h2fmi_state *_state, int _enabled, int _encrypt)
 {
 	if(_enabled)
 	{
 		// TODO: FTL override.
-		
-		_state->aes.data_size = _state->geo.bytes_per_page;
-		_state->aes.iv_param = (void*)_state;
-		_state->aes.gen_iv = h2fmi_aes_gen_iv;
-		_state->aes.key = h2fmi_aes_key;
-		_state->aes.decrypt = !_encrypt;
-		_state->aes.type = CDMA_AES_128;
-
+		h2fmi_default_aes(_state, &_state->aes, !_encrypt);
 		cdma_aes(_state->pdata->dma0, &_state->aes);
 	}
 	else
@@ -962,6 +969,7 @@ static int h2fmi_read_pages(struct h2fmi_state *_state, int _count,
 	_state->transaction.eccres = _eccres;
 	_state->transaction.eccbuf = _eccbuf;
 
+	spin_lock(&_state->lock);
 	_state->state = H2FMI_READ;
 	_state->read_state = H2FMI_READ_BEGIN;
 
@@ -977,16 +985,17 @@ static int h2fmi_read_pages(struct h2fmi_state *_state, int _count,
 				|| cdma_wait(_state->pdata->dma1))
 		{
 			dev_err(&_state->dev->dev, "failed to wait for DMA completion.\n");
-			return -ETIMEDOUT;
+			_state->transaction.result = -ETIMEDOUT;
 		}
-
-		_state->transaction.result = 0;
+		else
+			_state->transaction.result = 0;
 	}
 
 	cdma_cancel(_state->pdata->dma0);
 	cdma_cancel(_state->pdata->dma1);
 
 	_state->state = H2FMI_IDLE;
+	spin_unlock(&_state->lock);
 	h2fmi_clear_interrupt(_state);
 
 	// metadata whitening
@@ -997,7 +1006,19 @@ static int h2fmi_read_pages(struct h2fmi_state *_state, int _count,
 
 		for(i = 0; i < _count; i++)
 		{
-			u8 *sg_ptr = sg_virt(sg);
+			u8 *sg_ptr, *ptr;
+			u32 *p;
+
+			if(!count || !sg)
+			{
+				printk(KERN_WARNING "h2fmi: not enough SGs for metadata!\n");
+				break;
+			}
+
+			sg_ptr = sg_virt(sg);
+			ptr = sg_ptr + sg_off;
+			p = (u32*)ptr;
+
 			if(!sg_ptr)
 			{
 				if(!i)
@@ -1005,9 +1026,6 @@ static int h2fmi_read_pages(struct h2fmi_state *_state, int _count,
 				
 				panic("Not enough SGs for metadata! Not caught earlier!\n");
 			}
-			
-			u8 *ptr = sg_ptr + sg_off;
-			u32 *p = (u32*)ptr;
 
 			if(sg->length - sg_off < _state->geo.oob_alloc_size)
 				panic("SG too small for metadata whitening. %d-%d.\n", sg->length, sg_off);
@@ -1023,12 +1041,10 @@ static int h2fmi_read_pages(struct h2fmi_state *_state, int _count,
 			sg_off += _state->geo.oob_alloc_size;
 			if(sg_off >= sg->length)
 			{
-				if(count == 0 || !(sg = sg_next(sg)))
-				{
-					printk(KERN_ERR "h2fmi: not enough SGs for metadata!\n");
-					break;
-				}
+				if(count == 0)
+					continue;
 
+				sg = sg_next(sg);
 				sg_off = 0;
 				count--;
 			}
@@ -1351,6 +1367,7 @@ static int h2fmi_write_pages(struct h2fmi_state *_state, int _count,
 
 	_state->transaction.write_mode = _mode;
 
+	spin_lock(&_state->lock);
 	_state->state = H2FMI_WRITE;
 	_state->write_state = H2FMI_WRITE_BEGIN;
 
@@ -1368,10 +1385,10 @@ static int h2fmi_write_pages(struct h2fmi_state *_state, int _count,
 				|| cdma_wait(_state->pdata->dma1))
 		{
 			dev_err(&_state->dev->dev, "failed to wait for DMA completion.\n");
-			return -ETIMEDOUT;
+			_state->transaction.result = -ETIMEDOUT;
 		}
-
-		_state->transaction.result = 0;
+		else
+			_state->transaction.result = 0;
 	}
 
 	cdma_cancel(_state->pdata->dma0);
@@ -1380,6 +1397,7 @@ static int h2fmi_write_pages(struct h2fmi_state *_state, int _count,
 	h2fmi_reset_timing(_state);
 
 	_state->state = H2FMI_IDLE;
+	spin_unlock(&_state->lock);
 	h2fmi_clear_interrupt(_state);
 	
 	if(_state->transaction.result)
@@ -1406,6 +1424,7 @@ static int h2fmi_erase_blocks(struct h2fmi_state *_state,
 	_state->transaction.chips = _ces;
 	_state->transaction.pages = _pages;
 
+	spin_lock(&_state->lock);
 	_state->state = H2FMI_ERASE;
 
 	h2fmi_reset(_state);
@@ -1494,6 +1513,7 @@ static int h2fmi_erase_blocks(struct h2fmi_state *_state,
 	h2fmi_disable_bus(_state);
 
 	_state->state = H2FMI_IDLE;
+	spin_unlock(&_state->lock);
 
 	if(!eraseOK)
 		return -EIO;
@@ -1522,13 +1542,25 @@ static int h2fmi_read_single_page(struct h2fmi_state *_state, u16 _ce, int _page
 
 // NAND interface implementation
 
+static int h2fmi_nand_default_aes(struct apple_nand *_nd, struct cdma_aes *_aes, int _dec)
+{
+	struct h2fmi_state *state = container_of(_nd, struct h2fmi_state, nand);
+	return h2fmi_default_aes(state, _aes, _dec);
+}
+
+static int h2fmi_nand_aes(struct apple_nand *_nd, struct cdma_aes *_aes)
+{
+	struct h2fmi_state *state = container_of(_nd, struct h2fmi_state, nand);
+	cdma_aes(state->pdata->dma0, _aes);
+	return 0;
+}
+
 static int h2fmi_nand_read(struct apple_nand *_nd, int _count,
 		u16 *_chips, page_t *_pages,
 		struct scatterlist *_sg_data, size_t _sg_num_data,
 		struct scatterlist *_sg_oob, size_t _sg_num_oob)
 {
 	struct h2fmi_state *state = container_of(_nd, struct h2fmi_state, nand);
-	h2fmi_setup_aes(state, 1, 0); // TODO: FTL-mode
 	return h2fmi_read_pages(state, _count, _chips, _pages,
 			_sg_data, _sg_num_data, _sg_oob, _sg_num_oob, NULL, NULL);
 }
@@ -1539,7 +1571,6 @@ static int h2fmi_nand_write(struct apple_nand *_nd, int _count,
 		struct scatterlist *_sg_oob, size_t _sg_num_oob)
 {
 	struct h2fmi_state *state = container_of(_nd, struct h2fmi_state, nand);
-	h2fmi_setup_aes(state, 1, 1); // TODO: FTL-mode
 	return h2fmi_write_pages(state, _count, _chips, _pages,
 			_sg_data, _sg_num_data, _sg_oob, _sg_num_oob, H2FMI_WRITE_NORMAL);
 }
@@ -1559,6 +1590,9 @@ static int h2fmi_nand_get(struct apple_nand *_nd, int _info)
 	{
 	case NAND_NUM_CE:
 		return state->geo.num_ce;
+	
+	case NAND_BITMAP:
+		return state->bitmap;
 
 	case NAND_BLOCKS_PER_CE:
 		return state->geo.blocks_per_ce;
@@ -1643,8 +1677,11 @@ static int h2fmi_scan_bbt(struct h2fmi_state *_state)
 				"DEVICEINFOBBT\0\0\0", _state->bbt[i], sz);
 		if(ret)
 			return ret;
+
+		printk(KERN_INFO "%s: scanned one chip.\n", __func__);
 	}
 
+	printk(KERN_INFO "%s: bbt scanned!\n", __func__);
 	return 0;
 }
 
@@ -1818,11 +1855,15 @@ static int h2fmi_detect_nand(struct h2fmi_state *_state)
 	writel(_state->timing, _state->flash_regs + H2FMI_TIMING);
 	dev_info(&_state->dev->dev, "timing 0x%08x.\n", _state->timing);
 
+	printk("h2fmi: scanning bbt...\n");
+
 	ret = h2fmi_scan_bbt(_state);
 	if(ret)
 		return ret;
 
-	return 0;
+	return apple_nand_register(&_state->nand,
+							   _state->pdata->vfl,
+							   &_state->dev->dev);
 }
 
 int h2fmi_probe(struct platform_device *_dev)
@@ -1840,9 +1881,12 @@ int h2fmi_probe(struct platform_device *_dev)
 
 	state->dev = _dev;
 	state->pdata = _dev->dev.platform_data;
+	spin_lock_init(&state->lock);
 
 	// Setup interface
 	{
+		state->nand.default_aes = h2fmi_nand_default_aes;
+		state->nand.aes = h2fmi_nand_aes;
 		state->nand.read = h2fmi_nand_read;
 		state->nand.write = h2fmi_nand_write;
 		state->nand.erase = h2fmi_nand_erase;

@@ -161,6 +161,13 @@ void _clk_enable(struct clk *clk)
 	_clk_enable(clk->parent);
 	pr_debug("%s update hardware clock %s %d %pS\n",
 		 __func__, clk->name, clk->id, clk->dev);
+
+	if(!clk->enable)
+	{
+		printk(KERN_ERR "missing clk_enable for %s!\n", clk->name);
+		return;
+	}
+
 	(clk->enable)(clk, 1);
 }
 
@@ -397,11 +404,13 @@ int s3c24xx_register_clock(struct clk *clk)
 		list_for_each_entry(c, &clocks, list) {
 			if (c->enable == clk->enable &&
 			    c->ctrlbit & clk->ctrlbit) {
-				pr_warning("%s: new clock %s, id %d, dev %p "
+				// We use indices in the ctrlbit field,
+				// so let's ignore this for now! -- Ricky26
+				/*pr_warning("%s: new clock %s, id %d, dev %p "
 					   "uses same enable bit as "
 					   "%s, id %d, dev %p\n", __func__,
 					   clk->name, clk->id, clk->dev,
-					   c->name, c->id, c->dev);
+					   c->name, c->id, c->dev);*/
 			}
 			if (!nullstrcmp(c->name, clk->name) &&
 			    c->id == clk->id && c->dev == clk->dev) {
