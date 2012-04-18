@@ -46,11 +46,6 @@
 
 // PLLs
 
-static int s5l_clock_always_on(struct clk *_clk, int _enable)
-{
-	return 0;
-}
-
 struct s5l_pll
 {
 	struct clk clk;
@@ -108,7 +103,6 @@ static struct s5l_pll s5l_plls[] = {
 			.name = "apll",
 			.id = -1,
 			.ops = &s5l_pll_clk_ops,
-			.enable = s5l_clock_always_on,
 		},
 
 		.con0 = S5L_APLL_CON0,
@@ -119,7 +113,6 @@ static struct s5l_pll s5l_plls[] = {
 			.name = "mpll",
 			.id = -1,
 			.ops = &s5l_pll_clk_ops,
-			.enable = s5l_clock_always_on,
 		},
 
 		.con0 = S5L_MPLL_CON0,
@@ -130,7 +123,6 @@ static struct s5l_pll s5l_plls[] = {
 			.name = "epll",
 			.id = -1,
 			.ops = &s5l_pll_clk_ops,
-			.enable = s5l_clock_always_on,
 		},
 
 		.con0 = S5L_EPLL_CON0,
@@ -141,7 +133,6 @@ static struct s5l_pll s5l_plls[] = {
 			.name = "vpll",
 			.id = -1,
 			.ops = &s5l_pll_clk_ops,
-			.enable = s5l_clock_always_on,
 		},
 
 		.con0 = S5L_VPLL_CON0,
@@ -287,7 +278,6 @@ static struct clksrc_clk clk_system_source = {
 	.clk = {
 		.name = "system-source",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &s5l_pll_sources,
@@ -299,7 +289,6 @@ static struct clksrc_clk clk_system0 = {
 		.name = "system0",
 		.id = -1,
 		.parent = &clk_system_source.clk,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { .reg = VA_PMGR0 + 0x40, .shift = SHIFT_DIV1, .size = SIZE_DIV },
@@ -310,7 +299,6 @@ static struct clksrc_clk clk_system1 = {
 		.name = "system1",
 		.id = -1,
 		.parent = &clk_system0.clk,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { .reg = VA_PMGR0 + 0x40, .shift = SHIFT_DIV2, .size = SIZE_DIV },
@@ -321,7 +309,6 @@ static struct clksrc_clk clk_system2 = {
 		.name = "system2",
 		.id = -1,
 		.parent = &clk_system_source.clk,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { .reg = VA_PMGR0 + 0x40, .shift = SHIFT_DIV3, .size = SIZE_DIV },
@@ -332,7 +319,6 @@ static struct clksrc_clk clk_system3 = {
 		.name = "system3",
 		.id = -1,
 		.parent = &clk_system_source.clk,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { .reg = VA_PMGR0 + 0x40, .shift = SHIFT_DIV4, .size = SIZE_DIV },
@@ -343,7 +329,6 @@ static struct clksrc_clk clk_system4 = {
 		.name = "system4",
 		.id = -1,
 		.parent = &clk_system_source.clk,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { .reg = VA_PMGR0 + 0x40, .shift = SHIFT_DIV5, .size = SIZE_DIV },
@@ -365,7 +350,6 @@ static struct clksrc_clk clk_prediv0 = {
 	.clk = { 
 		.name = "prediv0",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_prediv_sources,
@@ -377,7 +361,6 @@ static struct clksrc_clk clk_prediv1 = {
 	.clk = { 
 		.name = "prediv1",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_prediv_sources,
@@ -389,7 +372,6 @@ static struct clksrc_clk clk_prediv2 = {
 	.clk = { 
 		.name = "prediv2",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_prediv_sources,
@@ -401,7 +383,6 @@ static struct clksrc_clk clk_prediv3 = {
 	.clk = { 
 		.name = "prediv3",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_prediv_sources,
@@ -413,7 +394,6 @@ static struct clksrc_clk clk_prediv4 = {
 	.clk = { 
 		.name = "prediv4",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_prediv_sources,
@@ -437,7 +417,6 @@ static struct clksrc_clk clk_base0 = {
 	.clk = {
 		.name = "base0",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_base_sources,
@@ -449,7 +428,6 @@ static struct clksrc_clk clk_base0_div0 = {
 		.name = "base0-div0",
 		.id = -1,
 		.parent = &clk_base0.clk,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { .reg = VA_PMGR0 + 0x70, .shift = SHIFT_DIV1, .size = SIZE_DIV },
@@ -460,7 +438,6 @@ static struct clksrc_clk clk_base0_div1 = {
 		.name = "base0-div1",
 		.id = -1,
 		.parent = &clk_base0.clk,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { .reg = VA_PMGR0 + 0x70, .shift = SHIFT_DIV2, .size = SIZE_DIV },
@@ -470,7 +447,6 @@ static struct clksrc_clk clk_base1 = {
 	.clk = {
 		.name = "base1",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_base_sources,
@@ -482,7 +458,6 @@ static struct clksrc_clk clk_base1_div0 = {
 		.name = "base1-div0",
 		.id = -1,
 		.parent = &clk_base1.clk,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { .reg = VA_PMGR0 + 0x74, .shift = SHIFT_DIV1, .size = SIZE_DIV },
@@ -493,7 +468,6 @@ static struct clksrc_clk clk_base2 = {
 		.name = "base2",
 		.id = -1,
 		.parent = &clk_prediv4.clk,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { .reg = VA_PMGR0 + 0x78, .shift = SHIFT_DIV1, .size = SIZE_DIV },
@@ -503,7 +477,6 @@ static struct clksrc_clk clk_medium0 = {
 	.clk = {
 		.name = "medium0",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 	
 	.sources = &clk_prediv_sources,
@@ -516,7 +489,6 @@ static struct clksrc_clk clk_medium1 = {
 		.name = "medium1",
 		.id = -1,
 		.parent = &s5l_plls[3].clk,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { .reg = VA_PMGR0 + 0xCC, .shift = SHIFT_DIV1, .size = SIZE_DIV },
@@ -527,7 +499,6 @@ static struct clksrc_clk clk_i2c_base = {
 		.name = "i2c-base",
 		.id = -1,
 		.parent = &clk_xtal,
-		.enable = s5l_clock_always_on,
 	},
 
 	.reg_div = { VA_PMGR0 + 0xC4, .shift = SHIFT_DIV1, .size = SIZE_DIV },
@@ -537,7 +508,6 @@ static struct clksrc_clk clk_nco_ref0 = {
 	.clk = {
 		.name = "nco-ref0",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 	
 	.sources = &clk_prediv_sources,
@@ -549,7 +519,6 @@ static struct clksrc_clk clk_nco_ref1 = {
 	.clk = {
 		.name = "nco-ref1",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 	
 	.sources = &clk_prediv_sources,
@@ -650,7 +619,6 @@ static struct clksrc_clk clk_lperf0 = {
 	.clk = {
 		.name = "lperf0",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_periph_sources1,
@@ -661,7 +629,6 @@ static struct clksrc_clk clk_lperf1 = {
 	.clk = {
 		.name = "lperf1",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_periph_sources0,
@@ -672,7 +639,6 @@ static struct clksrc_clk clk_lperf2 = {
 	.clk = {
 		.name = "lperf2",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_periph_sources1,
@@ -683,7 +649,6 @@ static struct clksrc_clk clk_lperf3 = {
 	.clk = {
 		.name = "lperf3",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_periph_sources1,
@@ -747,7 +712,6 @@ static struct clksrc_clk clk_mipi = {
 	.clk = {
 		.name = "mipi",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_base_sources,
@@ -759,7 +723,6 @@ static struct clksrc_clk clk_sdio = {
 	.clk = {
 		.name = "sdio",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_periph_sources1,
@@ -770,7 +733,6 @@ static struct clksrc_clk clk_clk50 = {
 	.clk = {
 		.name = "clk50",
 		.id = -1,
-		.enable = s5l_clock_always_on,
 	},
 
 	.sources = &clk_periph_sources1,
@@ -953,7 +915,6 @@ static struct clk clk_usbphy = {
 	.name = "usbphy",
 	.id = -1,
 	.parent = &clk_usbreg,
-	.enable = s5l_clock_always_on,
 };
 
 static struct clk clk_usbotg = {
