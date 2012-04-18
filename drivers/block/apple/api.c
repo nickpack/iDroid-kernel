@@ -52,8 +52,8 @@ int apple_nand_special_page(struct apple_nand *_nd, u16 _ce, char _page[16],
 				continue;
 			}
 
-			print_hex_dump(KERN_INFO, "h2fmi special-page: ", DUMP_PREFIX_OFFSET, 32,
-					1, buf, pagesz, true);
+			//print_hex_dump(KERN_INFO, "h2fmi special-page: ", DUMP_PREFIX_OFFSET, 32,
+			//		1, buf, pagesz, true);
 
 			if(memcmp(buf, _page, sizeof(_page)) == 0)
 			{

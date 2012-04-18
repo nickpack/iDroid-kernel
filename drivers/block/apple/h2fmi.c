@@ -489,7 +489,7 @@ static int h2fmi_check_ecc(struct h2fmi_state *_state)
 	int eccsts = readl(_state->ecc_regs + H2FMI_ECCSTS);
 	writel(eccsts, _state->ecc_regs + H2FMI_ECCSTS);
 
-	dev_info(&_state->dev->dev, "ecc-sts: 0x%08x.\n", eccsts);
+	//dev_info(&_state->dev->dev, "ecc-sts: 0x%08x.\n", eccsts);
 
 	if(_state->transaction.eccres)
 		_state->transaction.eccres
@@ -515,7 +515,7 @@ static int h2fmi_check_ecc(struct h2fmi_state *_state)
 		else
 			val = (buf >> 16) & 0x1F;
 
-		if(eptr)
+		if(_state->transaction.eccbuf)
 			eptr[i] = val;
 	}
 
@@ -997,7 +997,16 @@ static int h2fmi_read_pages(struct h2fmi_state *_state, int _count,
 
 		for(i = 0; i < _count; i++)
 		{
-			u8 *ptr = sg_virt(sg) + sg_off;
+			u8 *sg_ptr = sg_virt(sg);
+			if(!sg_ptr)
+			{
+				if(!i)
+					break;
+				
+				panic("Not enough SGs for metadata! Not caught earlier!\n");
+			}
+			
+			u8 *ptr = sg_ptr + sg_off;
 			u32 *p = (u32*)ptr;
 
 			if(sg->length - sg_off < _state->geo.oob_alloc_size)
@@ -1014,13 +1023,12 @@ static int h2fmi_read_pages(struct h2fmi_state *_state, int _count,
 			sg_off += _state->geo.oob_alloc_size;
 			if(sg_off >= sg->length)
 			{
-				if(count == 0)
+				if(count == 0 || !(sg = sg_next(sg)))
 				{
 					printk(KERN_ERR "h2fmi: not enough SGs for metadata!\n");
 					break;
 				}
 
-				sg = sg_next(sg);
 				sg_off = 0;
 				count--;
 			}
@@ -1506,7 +1514,7 @@ static int h2fmi_read_single_page(struct h2fmi_state *_state, u16 _ce, int _page
 	sg_init_one(&sg_oob, oobbuf, _state->geo.oob_size);
 
 	h2fmi_setup_aes(_state, !_raw, 0);
-	ret = h2fmi_read_pages(_state, 1, &chip, &page, &sg_buf, 1, &sg_oob, 1, NULL, NULL);
+	ret = h2fmi_read_pages(_state, 1, &chip, &page, &sg_buf, _buffer ? 1 : 0, &sg_oob, oobbuf ? 1: 0, NULL, NULL);
 
 	kfree(oobbuf);
 	return ret;
@@ -1520,6 +1528,7 @@ static int h2fmi_nand_read(struct apple_nand *_nd, int _count,
 		struct scatterlist *_sg_oob, size_t _sg_num_oob)
 {
 	struct h2fmi_state *state = container_of(_nd, struct h2fmi_state, nand);
+	h2fmi_setup_aes(state, 1, 0); // TODO: FTL-mode
 	return h2fmi_read_pages(state, _count, _chips, _pages,
 			_sg_data, _sg_num_data, _sg_oob, _sg_num_oob, NULL, NULL);
 }
@@ -1530,6 +1539,7 @@ static int h2fmi_nand_write(struct apple_nand *_nd, int _count,
 		struct scatterlist *_sg_oob, size_t _sg_num_oob)
 {
 	struct h2fmi_state *state = container_of(_nd, struct h2fmi_state, nand);
+	h2fmi_setup_aes(state, 1, 1); // TODO: FTL-mode
 	return h2fmi_write_pages(state, _count, _chips, _pages,
 			_sg_data, _sg_num_data, _sg_oob, _sg_num_oob, H2FMI_WRITE_NORMAL);
 }
