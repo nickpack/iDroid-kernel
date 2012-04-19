@@ -159,9 +159,11 @@ void _clk_enable(struct clk *clk)
 		return;
 
 	_clk_enable(clk->parent);
-	pr_debug("%s update hardware clock %s %d %pS\n",
-		 __func__, clk->name, clk->id, clk->dev);
-	(clk->enable)(clk, 1);
+	if (clk->enable) {
+		pr_debug("%s update hardware clock %s %d %pS\n",
+				__func__, clk->name, clk->id, clk->dev);
+		(clk->enable)(clk, 1);
+	}
 }
 
 int clk_enable(struct clk *clk)
@@ -396,7 +398,12 @@ int s3c24xx_register_clock(struct clk *clk)
 		struct clk *c;
 		list_for_each_entry(c, &clocks, list) {
 			if (c->enable == clk->enable &&
+#ifdef CONFIG_PLAT_S5L
+			    /* ctrlbit isn't bit really */
+			    c->ctrlbit == clk->ctrlbit) {
+#else
 			    c->ctrlbit & clk->ctrlbit) {
+#endif
 				pr_warning("%s: new clock %s, id %d, dev %p "
 					   "uses same enable bit as "
 					   "%s, id %d, dev %p\n", __func__,
