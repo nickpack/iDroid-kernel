@@ -21,6 +21,28 @@
 #include <plat/regs-uart.h>
 #include <plat/cpu.h>
 
+#define SOFTWARE_RX_TIMEOUT
+
+#ifdef SOFTWARE_RX_TIMEOUT
+/* TODO: each timer for each uart channel */
+static struct timer_list rx_timeout_timer;
+
+static void rx_timeout_timer_handler(unsigned long data)
+{
+	struct s5l_uart_irq *uirq = (struct s5l_uart_irq*) data;
+	struct irq_desc *desc = irq_to_desc(uirq->base_irq);
+
+	del_timer(&rx_timeout_timer);
+
+	if (desc) {
+		struct irqaction *action = desc->action;
+		action->handler(uirq->base_irq, action->dev_id);
+	}
+
+	__raw_writel(__raw_readl(uirq->regs + S5L8930_UCON) |
+			S5L8930_UCON_RXSIRQMASK, uirq->regs + S5L8930_UCON);
+}
+#endif
 /* Note, we make use of the fact that the parent IRQs, IRQ_UART[0..3]
  * are consecutive when looking up the interrupt in the demux routines.
  */
@@ -30,10 +52,27 @@ static void s5l_irq_demux_uart(unsigned int irq, struct irq_desc *desc)
 	u32 utrstat = __raw_readl(uirq->regs + S5L8930_UTRSTAT);
 	int base = uirq->base_irq;
 
-	if (utrstat & S5L8930_UTRSTAT_RXIRQ && utrstat & S5L8930_UTRSTAT_RXDR)
+	if (utrstat & S5L8930_UTRSTAT_RXIRQ && utrstat & S5L8930_UTRSTAT_RXDR) {
+#ifdef SOFTWARE_RX_TIMEOUT
+		del_timer(&rx_timeout_timer);
 		generic_handle_irq(base);
+		__raw_writel(__raw_readl(uirq->regs + S5L8930_UCON) |
+				S5L8930_UCON_RXSIRQMASK, uirq->regs + S5L8930_UCON);
+#else
+		generic_handle_irq(base);
+#endif
+	}
 	if (utrstat & S5L8930_UTRSTAT_TXIRQ)
 		generic_handle_irq(base + 2);
+#ifdef SOFTWARE_RX_TIMEOUT
+	if (utrstat & S5L8930_UTRSTAT_RXSIRQ) {
+		/* ack */
+		__raw_writel(utrstat, uirq->regs + S5L8930_UTRSTAT);
+		/* 1/16 sec timeout */
+		rx_timeout_timer.expires = jiffies + (HZ >> 4);
+		add_timer(&rx_timeout_timer);
+	}
+#endif
 }
 
 static inline void s5l_irq_uart_ack(struct irq_data *data)
@@ -51,9 +90,13 @@ static inline void s5l_irq_uart_mask(struct irq_data *data)
 	u32 ucon, mask;
 
 	if (data->irq - uirq->base_irq == 0)
-		mask = ~S5L8930_UCON_RXILEVEL;
+#ifdef SOFTWARE_RX_TIMEOUT
+		mask = ~(S5L8930_UCON_RXIRQEN | S5L8930_UCON_RXS);
+#else
+		mask = ~S5L8930_UCON_RXIRQEN;
+#endif
 	else if (data->irq - uirq->base_irq == 2)
-		mask = ~S5L8930_UCON_TXILEVEL;
+		mask = ~S5L8930_UCON_TXIRQEN;
 	else
 		return;
 
@@ -67,9 +110,13 @@ static void s5l_irq_uart_unmask(struct irq_data *data)
 	u32 ucon, mask;
 
 	if (data->irq - uirq->base_irq == 0)
-		mask = S5L8930_UCON_RXILEVEL;
+#ifdef SOFTWARE_RX_TIMEOUT
+		mask = S5L8930_UCON_RXIRQEN | S5L8930_UCON_RXS;
+#else
+		mask = S5L8930_UCON_RXIRQEN;
+#endif
 	else if (data->irq - uirq->base_irq == 2)
-		mask = S5L8930_UCON_TXILEVEL;
+		mask = S5L8930_UCON_TXIRQEN;
 	else
 		return;
 
@@ -94,7 +141,8 @@ static void __init s5l_init_uart_irq(struct s5l_uart_irq *uirq)
 
 	/* mask all interrupts at the start. */
 	ucon = __raw_readl(uirq->regs + S5L8930_UCON);
-	__raw_writel(ucon & ~(S5L8930_UCON_RXILEVEL | S5L8930_UCON_TXILEVEL),
+	__raw_writel(ucon & ~(S5L8930_UCON_RXIRQEN | S5L8930_UCON_TXIRQEN |
+				S5L8930_UCON_RXS),
 			uirq->regs + S5L8930_UCON);
 
 	irq_set_chip_and_handler(uirq->base_irq, &s5l_irq_uart, handle_level_irq);
@@ -119,6 +167,12 @@ static void __init s5l_init_uart_irq(struct s5l_uart_irq *uirq)
  */
 void __init s5l_init_uart_irqs(struct s5l_uart_irq *irq, unsigned int nr_irqs)
 {
+#ifdef SOFTWARE_RX_TIMEOUT
+	init_timer(&rx_timeout_timer);
+	rx_timeout_timer.data = (unsigned long)irq;
+	rx_timeout_timer.function = rx_timeout_timer_handler;
+#endif
+
 	for (; nr_irqs > 0; nr_irqs--, irq++)
 		s5l_init_uart_irq(irq);
 }
