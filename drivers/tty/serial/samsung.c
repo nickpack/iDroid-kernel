@@ -133,6 +133,10 @@ static void s3c24xx_serial_stop_tx(struct uart_port *port)
 	}
 }
 
+#ifdef CONFIG_PLAT_S5L
+static irqreturn_t s3c24xx_serial_tx_chars(int irq, void *id);
+#endif
+
 static void s3c24xx_serial_start_tx(struct uart_port *port)
 {
 	struct s3c24xx_uart_port *ourport = to_ourport(port);
@@ -144,6 +148,10 @@ static void s3c24xx_serial_start_tx(struct uart_port *port)
 		enable_irq(ourport->tx_irq);
 		tx_enabled(port) = 1;
 	}
+#ifdef CONFIG_PLAT_S5L
+	else
+		s3c24xx_serial_tx_chars(ourport->tx_irq, ourport);
+#endif
 }
 
 

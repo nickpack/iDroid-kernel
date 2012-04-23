@@ -13,8 +13,6 @@
 
 #include <plat/irqs.h>
 
-#define IRQ_TIMER	0x11
-
 #define IRQ_TIMER0_VIC	300
 #define IRQ_TIMER1_VIC	301
 #define IRQ_TIMER2_VIC	302
@@ -32,10 +30,10 @@
 
 #define IRQ_GPIO	0x74
 
-#define IRQ_UART0	0x16
-#define IRQ_UART1	0x17
-#define IRQ_UART2	0x18
-#define IRQ_UART3	0x19
+#define IRQ_UART0		S5L_IRQ_VIC0(22)
+#define IRQ_UART1		S5L_IRQ_VIC0(23)
+#define IRQ_UART2		S5L_IRQ_VIC0(24)
+#define IRQ_UART3		S5L_IRQ_VIC0(25)
 
 #define IRQ_HSMMC0	0x26
 

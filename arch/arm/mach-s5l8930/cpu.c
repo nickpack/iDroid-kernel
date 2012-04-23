@@ -27,7 +27,7 @@
 #include <plat/devs.h>
 #include <plat/cpu.h>
 #include <plat/iic.h>
-#include <plat/regs-serial.h>
+#include <plat/regs-uart.h>
 #include <plat/irq-vic-timer.h>
 #include <plat/sdhci.h>
 
@@ -224,18 +224,18 @@ static struct cpu_table cpu_id[] __initdata = {
 	},
 };
 
-#define S5L8930_UCON_DEFAULT	(S3C2410_UCON_TXILEVEL |	\
-				 S3C2410_UCON_RXILEVEL |	\
-				 S3C2410_UCON_TXIRQMODE |	\
-				 S3C2410_UCON_RXIRQMODE |	\
-				 S3C2410_UCON_RXFIFO_TOI |	\
-				 S3C2443_UCON_RXERR_IRQEN)
+#define S5L8930_UCON_DEFAULT	(S5L8930_UCON_TXIRQMODE |	\
+				 S5L8930_UCON_RXIRQMODE)
 
-#define S5L8930_ULCON_DEFAULT	S3C2410_LCON_CS8
+#define S5L8930_ULCON_DEFAULT	S5L8930_LCON_CS8
+#if 0
 
-#define S5L8930_UFCON_DEFAULT	(S3C2410_UFCON_FIFOMODE |	\
+#define S5L8930_UFCON_DEFAULT	(S5L8930_UFCON_FIFOMODE |	\
 				 S3C2440_UFCON_RXTRIG8 |	\
 				 S3C2440_UFCON_TXTRIG16)
+#else
+#define S5L8930_UFCON_DEFAULT	(S5L8930_UFCON_FIFOMODE)
+#endif
 
 static struct s3c24xx_uart_clksrc s5l8930_uart_srcs[] = {
 	[0] = {
@@ -300,18 +300,11 @@ void __init s5l8930_map_io(void)
 	s3c24xx_init_uarts(s5l8930_uartcfgs, ARRAY_SIZE(s5l8930_uartcfgs));
 }
 
-static void __initdata __iomem *s5l8930_vics[] = {
-	VA_VIC0,
-	VA_VIC1,
-	VA_VIC2,
-	VA_VIC3,
-};
-
 void __init s5l8930_init_irq(void)
 {
+	u32 vic[] = {~0, ~0, ~0, ~0};
 	printk("%s\n", __func__);
-	s5l_init_vics(s5l8930_vics, ARRAY_SIZE(s5l8930_vics));
-	s3c_init_vic_timer_irq(1, IRQ_TIMER);
+	s5l_init_irq(vic, ARRAY_SIZE(vic));
 	printk("%s done\n", __func__);
 }
 

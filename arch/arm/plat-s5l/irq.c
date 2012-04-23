@@ -1,5 +1,17 @@
+/*
+ * Copyright (c) 2012 Alexey Makhalov (makhaloff@gmail.com).
+ *
+ * S5L - Interrupt Initialization
+ *
+ * This file is part of the iDroid Project. (http://www.idroidproject.org).
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ */
 #include <plat/irq.h>
 #include <asm/hardware/vic.h>
+#include <linux/io.h>
 
 #include <linux/serial_core.h>
 #include <mach/map.h>
@@ -9,7 +21,7 @@
 #include <plat/irq-vic-timer.h>
 #include <plat/irq-uart.h>
 
-static struct s3c_uart_irq uart_irqs[] = {
+static struct s5l_uart_irq uart_irqs[] = {
 	[0] = {
 		.regs		= VA_UART0,
 		.base_irq	= IRQ_S5L_UART_BASE0,
@@ -27,11 +39,14 @@ static struct s3c_uart_irq uart_irqs[] = {
 	},
 };
 
-void s5l_init_vics(void __iomem **_bases, uint32_t _count)
+void s5l_init_irq(u32 *vic, u32 num_vic)
 {
-	uint32_t i;
-	for(i = 0; i < _count; i++)
-		vic_init(_bases[i], i*32, 0xffffffff, 0);
+#ifdef CONFIG_ARM_VIC
+	int irq;
+	for(irq = 0; irq < num_vic; irq++)
+		vic_init(VA_VIC(irq), VIC_BASE(irq), vic[irq], 0);
+#endif
 
-	s3c_init_uart_irqs(uart_irqs, ARRAY_SIZE(uart_irqs));
+/*	s3c_init_vic_timer_irq(1, 11);*/
+	s5l_init_uart_irqs(uart_irqs, ARRAY_SIZE(uart_irqs));
 }

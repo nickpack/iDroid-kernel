@@ -14,6 +14,6 @@
 #include <linux/compiler.h>
 #include <linux/types.h>
 
-extern void s5l_init_vics(void __iomem **_bases, uint32_t _count);
+extern void s5l_init_irq(u32 *vic, u32 num_vic);
 
 #endif //_S5L_IRQ_
