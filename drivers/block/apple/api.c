@@ -180,6 +180,163 @@ EXPORT_SYMBOL_GPL(apple_nand_unregister);
 // VFL
 //
 
+int apple_vfl_read_nand_pages(struct apple_vfl *_vfl,
+		size_t _count, u16 *_ces, page_t *_pages,
+		struct scatterlist *_sg_data, size_t _sg_num_data,
+		struct scatterlist *_sg_oob, size_t _sg_num_oob)
+{
+	// Check whether this is all on one bus, if so, just pass-through
+
+	int ret, ok = 1, ce, bus, i;
+
+	if(!_count)
+		return 0;
+
+	ce = _ces[0];
+	bus = _vfl->chips[ce].bus;
+	for(i = 1; i < _count; i++)
+	{
+		if(_vfl->chips[_ces[i]].bus != bus)
+		{
+			ok = 0;
+			break;
+		}
+	}
+
+	if(ok)
+	{
+		// only one bus, pass it along!
+
+		struct apple_nand *nand = _vfl->devices[bus];
+		u16 *chips = kmalloc(sizeof(*chips)*_count, GFP_KERNEL);
+		if(!chips)
+			return -ENOMEM;
+
+		ret = nand->read(nand, _count, chips, _pages,
+						 _sg_data, _sg_num_data,
+						 _sg_oob, _sg_num_oob);
+		kfree(chips);
+		return ret;
+	}
+	else
+	{
+/*
+		int nd = _vfl->num_devices;
+		u16 *chips = kmalloc(sizeof(*chips)*_count*nd, GFP_KERNEL);
+		page_t *pages = kmalloc(sizeof(*pages)*_count*nd, GFP_KERNEL);
+		int *count = kzalloc(sizeof(*count)*nd, GFP_KERNEL);
+		int num_bus = 0;
+
+		if(!chips || !pages || !count)
+		{
+			kfree(chips);
+			kfree(pages);
+			kfree(count);
+			return -ENOMEM;
+		}
+
+		for(i = 0; i < _count; i++)
+		{
+			int ce = _ces[i];
+			int bus = _vfl->chips[ce].bus;
+			int realCE = _vfl->chips[ce].chip;
+			
+			int idx = count[bus]++;
+			chips[bus*_count + idx] = realCE;
+			pages[bus*_count + idx] = _pages[i];
+		}
+
+		ret = 0;
+		for(i = 0; i < nd; i++)
+		{
+			struct apple_nand *nand = _vfl->devices[i];
+
+			if(!count[i])
+				continue;
+			
+			ret = nand->read(nand, count[i],
+							 &chips[i*_count],
+							 &pages[i*_count],
+							 
+							 // ARGH, NEED TO SPLIT SGs!
+		}
+*/
+		panic("apple-flash: SG splitting not yet implemented!\n");
+	}
+}
+EXPORT_SYMBOL_GPL(apple_vfl_read_nand_pages);
+
+int apple_vfl_write_nand_pages(struct apple_vfl *_vfl,
+		size_t _count, u16 *_ces, page_t *_pages,
+		struct scatterlist *_sg_data, size_t _sg_num_data,
+		struct scatterlist *_sg_oob, size_t _sg_num_oob)
+{
+	// Check whether this is all on one bus, if so, just pass-through
+
+	int ret, ok = 1, ce, bus, i;
+
+	if(!_count)
+		return 0;
+
+	ce = _ces[0];
+	bus = _vfl->chips[ce].bus;
+	for(i = 1; i < _count; i++)
+	{
+		if(_vfl->chips[_ces[i]].bus != bus)
+		{
+			ok = 0;
+			break;
+		}
+	}
+
+	if(ok)
+	{
+		// only one bus, pass it along!
+
+		struct apple_nand *nand = _vfl->devices[bus];
+		u16 *chips = kmalloc(sizeof(*chips)*_count, GFP_KERNEL);
+		if(!chips)
+			return -ENOMEM;
+
+		ret = nand->write(nand, _count, chips, _pages,
+						 _sg_data, _sg_num_data,
+						 _sg_oob, _sg_num_oob);
+		kfree(chips);
+		return ret;
+	}
+	else
+		panic("apple-flash: SG splitting not implemented!\n");
+}
+EXPORT_SYMBOL_GPL(apple_vfl_write_nand_pages);
+
+int apple_vfl_read_nand_page(struct apple_vfl *_vfl, u16 _ce,
+		page_t _page, uint8_t *_data, uint8_t *_oob)
+{
+	struct scatterlist sg_buf, sg_oob;
+
+	sg_init_one(&sg_buf, _data, _vfl->get(_vfl, NAND_PAGE_SIZE));
+	sg_init_one(&sg_oob, _oob, _vfl->get(_vfl, NAND_OOB_ALLOC));
+
+	return apple_vfl_read_nand_pages(_vfl, 1, &_ce, &_page,
+					&sg_buf, _data ? 1 : 0,
+					&sg_oob, _oob ? 1 : 0);
+}
+EXPORT_SYMBOL_GPL(apple_vfl_read_nand_page);
+
+int apple_vfl_write_nand_page(struct apple_vfl *_vfl, u16 _ce,
+        page_t _page, const uint8_t *_data, const uint8_t *_oob)
+{
+	struct scatterlist sg_buf, sg_oob;
+
+	sg_init_one(&sg_buf, _data, _vfl->get(_vfl, NAND_PAGE_SIZE));
+	sg_init_one(&sg_oob, _oob, _vfl->get(_vfl, NAND_OOB_ALLOC));
+
+	return apple_vfl_write_nand_pages(_vfl, 1, &_ce,
+					&_page, &sg_buf, _data ? 1 : 0,
+					&sg_oob, _oob ? 1 : 0);
+}
+EXPORT_SYMBOL_GPL(apple_vfl_write_nand_page);
+
 int apple_vfl_read_page(struct apple_vfl *_vfl, page_t _page,
 		uint8_t *_data, uint8_t *_oob)
 {
@@ -221,6 +378,7 @@ void apple_vfl_init(struct apple_vfl *_vfl)
 
 	_vfl->chips = kzalloc(GFP_KERNEL, sizeof(*_vfl->chips)*_vfl->max_chips);
 }
+EXPORT_SYMBOL_GPL(apple_vfl_init);
 
 int apple_vfl_register(struct apple_vfl *_vfl, enum apple_vfl_detection _detect)
 {
@@ -228,8 +386,6 @@ int apple_vfl_register(struct apple_vfl *_vfl, enum apple_vfl_detection _detect)
 	u8 sigbuf[264];
 	u32 flags;
 	struct apple_chip_map *dc = &_vfl->chips[0];
-
-	printk(KERN_INFO "%s\n", __func__);
 
 	// Setup Chip Map
 	if(!_vfl->num_devices)
@@ -341,12 +497,14 @@ int apple_vfl_register(struct apple_vfl *_vfl, enum apple_vfl_detection _detect)
 
 	return 0;
 }
+EXPORT_SYMBOL_GPL(apple_vfl_register);
 
 void apple_vfl_unregister(struct apple_vfl *_vfl)
 {
 	kfree(_vfl->chips);
 	kfree(_vfl->devices);
 }
+EXPORT_SYMBOL_GPL(apple_vfl_unregister);
 
 //
 // FTL

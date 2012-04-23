@@ -138,6 +138,7 @@ struct h2fmi_geometry
 	uint16_t blocks_per_ce;
 	uint32_t pages_per_ce;
 	uint16_t pages_per_block;
+	uint32_t block_address_space;
 	uint16_t bytes_per_page;
 	uint16_t ecc_steps;
 	uint16_t bytes_per_spare;
@@ -1555,7 +1556,7 @@ static int h2fmi_nand_aes(struct apple_nand *_nd, struct cdma_aes *_aes)
 	return 0;
 }
 
-static int h2fmi_nand_read(struct apple_nand *_nd, int _count,
+static int h2fmi_nand_read(struct apple_nand *_nd, size_t _count,
 		u16 *_chips, page_t *_pages,
 		struct scatterlist *_sg_data, size_t _sg_num_data,
 		struct scatterlist *_sg_oob, size_t _sg_num_oob)
@@ -1565,7 +1566,7 @@ static int h2fmi_nand_read(struct apple_nand *_nd, int _count,
 			_sg_data, _sg_num_data, _sg_oob, _sg_num_oob, NULL, NULL);
 }
 
-static int h2fmi_nand_write(struct apple_nand *_nd, int _count,
+static int h2fmi_nand_write(struct apple_nand *_nd, size_t _count,
 		u16 *_chips, page_t *_pages,
 		struct scatterlist *_sg_data, size_t _sg_num_data,
 		struct scatterlist *_sg_oob, size_t _sg_num_oob)
@@ -1575,7 +1576,7 @@ static int h2fmi_nand_write(struct apple_nand *_nd, int _count,
 			_sg_data, _sg_num_data, _sg_oob, _sg_num_oob, H2FMI_WRITE_NORMAL);
 }
 
-static int h2fmi_nand_erase(struct apple_nand *_nd, int _count,
+static int h2fmi_nand_erase(struct apple_nand *_nd, size_t _count,
 		u16 *_chips, page_t *_blocks)
 {
 	struct h2fmi_state *state = container_of(_nd, struct h2fmi_state, nand);
@@ -1602,9 +1603,15 @@ static int h2fmi_nand_get(struct apple_nand *_nd, int _info)
 
 	case NAND_PAGES_PER_BLOCK:
 		return state->geo.pages_per_block;
+	   
+	case NAND_BLOCK_ADDRESS_SPACE:
+		return state->geo.block_address_space;
 
 	case NAND_ECC_STEPS:
 		return state->geo.ecc_steps;
+
+	case NAND_ECC_BITS:
+		return state->ecc_bits;
 
 	case NAND_BYTES_PER_SPARE:
 		return state->geo.bytes_per_spare;
@@ -1766,6 +1773,7 @@ static int h2fmi_detect_nand(struct h2fmi_state *_state)
 	_state->geo.num_ce = count;
 	_state->geo.bytes_per_page = _state->chip_info->bytes_per_page;
 	_state->geo.pages_per_block = _state->chip_info->pages_per_block;
+	_state->geo.block_address_space = roundup_pow_of_two(_state->geo.pages_per_block);
 	_state->geo.blocks_per_ce = _state->chip_info->blocks_per_ce;
 	_state->geo.pages_per_ce = _state->geo.pages_per_block * _state->geo.blocks_per_ce;
 	_state->geo.ecc_steps = _state->chip_info->bytes_per_page >> _state->ecc_step_shift;
