@@ -137,6 +137,8 @@ extern void apple_vfl_init(struct apple_vfl*);
 extern int apple_vfl_register(struct apple_vfl*, enum apple_vfl_detection _detect);
 extern void apple_vfl_unregister(struct apple_vfl*);
 
+extern int apple_vfl_special_page(struct apple_vfl*, u16 _ce, char _page[16],
+		uint8_t* _buffer, size_t _amt);
 extern int apple_vfl_read_nand_pages(struct apple_vfl*,
 		size_t _count, u16 *_ces, page_t *_pages,
 		struct scatterlist *_sg_data, size_t _sg_num_data,
@@ -149,6 +151,8 @@ extern int apple_vfl_read_nand_page(struct apple_vfl*, u16 _ce,
 		page_t _page, uint8_t *_data, uint8_t *_oob);
 extern int apple_vfl_write_nand_page(struct apple_vfl*, u16 _ce,
         page_t _page, const uint8_t *_data, const uint8_t *_oob);
+extern int apple_vfl_erase_nand_block(struct apple_vfl*, u16 _ce,
+	    page_t _page);
 extern int apple_vfl_read_page(struct apple_vfl*, page_t _page,
 		uint8_t *_data, uint8_t *_oob);
 extern int apple_vfl_write_page(struct apple_vfl*, page_t _page,
@@ -156,6 +160,22 @@ extern int apple_vfl_write_page(struct apple_vfl*, page_t _page,
 
 extern int apple_legacy_vfl_detect(struct apple_vfl *_vfl);
 extern int apple_vsvfl_detect(struct apple_vfl *_vfl);
+
+static inline int apple_vfl_get(struct apple_vfl *_nd, int _id)
+{
+	if(!_nd)
+		return 0;
+
+	return _nd->get(_nd, _id);
+}
+
+static inline int apple_vfl_set(struct apple_vfl *_nd, int _id, int _val)
+{
+	if(!_nd)
+		return -EINVAL;
+
+	return _nd->set(_nd, _id, _val);
+}
 
 struct apple_ftl
 {

@@ -180,6 +180,16 @@ EXPORT_SYMBOL_GPL(apple_nand_unregister);
 // VFL
 //
 
+int apple_vfl_special_page(struct apple_vfl *_vfl,
+						   u16 _ce, char _page[16],
+						   uint8_t* _buffer, size_t _amt)
+{
+	struct apple_chip_map *chip = &_vfl->chips[_ce];
+	struct apple_nand *nand = _vfl->devices[chip->bus];
+	return apple_nand_special_page(nand, chip->chip,
+								   _page, _buffer, _amt);
+}
+
 int apple_vfl_read_nand_pages(struct apple_vfl *_vfl,
 		size_t _count, u16 *_ces, page_t *_pages,
 		struct scatterlist *_sg_data, size_t _sg_num_data,
