@@ -468,9 +468,6 @@ int cdma_aes(u32 _channel, struct cdma_aes *_aes)
 	if(_channel > state->num_channels)
 		return -ENOENT;
 
-	if(cstate->aes == _aes)
-		return 0;
-
 	if(cstate->aes && !_aes)
 	{
 		state->aes_bitmap &=~ (1 << cstate->aes_channel);

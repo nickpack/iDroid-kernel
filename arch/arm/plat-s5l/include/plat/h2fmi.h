@@ -11,6 +11,8 @@
 #ifndef  __S5L_H2FMI__
 #define  __S5L_H2FMI__
 
+#include <linux/apple_flash.h>
+
 typedef uint32_t h2fmi_chip_id_t;
 
 struct h2fmi_timing_info
@@ -53,6 +55,7 @@ struct h2fmi_platform_data
 	int dma0, dma1;
 	int pid0, pid1;
 
+	struct apple_vfl *vfl;
 	struct h2fmi_smth *smth;
 };
 

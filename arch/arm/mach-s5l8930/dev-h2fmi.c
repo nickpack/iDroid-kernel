@@ -77,20 +77,9 @@ static struct h2fmi_smth h2fmi_smth_ipt4g = { { 0, 0, 0, 5, 5, 5, 5, 0 }, { 0x33
 static struct h2fmi_smth h2fmi_smth_atv2g = { { 0, 0, 0, 3, 3, 3, 4, 0 }, { 0x3333, 0xCCCC, 0 } };
 #endif
 
-static int count_bits(u32 _val)
-{
-	int ret = 0;
-
-	while(_val > 0)
-	{
-		if(_val & 1)
-			ret++;
-		
-		_val >>= 1;
-	}
-
-	return ret;
-}
+static struct apple_vfl vfl = {
+	.max_devices = 2,
+};
 
 static struct h2fmi_platform_data pdata0 = {
 	.ecc_step_shift = 10,
@@ -100,6 +89,8 @@ static struct h2fmi_platform_data pdata0 = {
 
 	.pid0 = 1,
 	.pid1 = 2,
+
+	.vfl = &vfl,
 };
 
 static struct h2fmi_platform_data pdata1 = {
@@ -110,6 +101,8 @@ static struct h2fmi_platform_data pdata1 = {
 
 	.pid0 = 3,
 	.pid1 = 4,
+
+	.vfl = &vfl,
 };
 
 static struct platform_device h2fmi0 = {
@@ -174,9 +167,22 @@ int s5l8930_register_h2fmi(void)
 	}
 #endif
 
+	apple_vfl_init(&vfl);
+
 	ret = platform_device_register(&h2fmi0);
 	if(ret)
 		return ret;
 
-	return platform_device_register(&h2fmi1);
+	ret = platform_device_register(&h2fmi1);
+	if(ret)
+		return ret;
+
+	return 0;
 }
+
+int register_vfl(void)
+{
+	wait_for_device_probe();
+	return apple_vfl_register(&vfl, APPLE_VFL_NEW_STYLE);
+}
+late_initcall(register_vfl);
