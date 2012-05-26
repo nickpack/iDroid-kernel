@@ -415,6 +415,7 @@ int s3c24xx_register_clock(struct clk *clk)
 					   "%s, id %d, dev %p\n", __func__,
 					   clk->name, clk->id, clk->dev,
 					   c->name, c->id, c->dev);*/
+#endif
 			}
 			if (!nullstrcmp(c->name, clk->name) &&
 			    c->id == clk->id && c->dev == clk->dev) {
